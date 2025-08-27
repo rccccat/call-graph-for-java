@@ -5,11 +5,24 @@
     <vendor>rccccat</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+    <depends>org.jetbrains.kotlin</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.rccccat.ideacallgraph.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <toolWindow factoryClass="com.github.rccccat.ideacallgraph.toolWindow.MyToolWindowFactory" id="Call Graph"/>
         <postStartupActivity implementation="com.github.rccccat.ideacallgraph.startup.MyProjectActivity" />
+        <applicationConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings" 
+                                instance="com.github.rccccat.ideacallgraph.settings.CallGraphConfigurable"/>
     </extensions>
+
+    <actions>
+        <action id="GenerateCallGraph" 
+                class="com.github.rccccat.ideacallgraph.actions.GenerateCallGraphAction" 
+                text="Generate Call Graph" 
+                description="Generate call graph for the selected method or function">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

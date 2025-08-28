@@ -12,9 +12,11 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.rccccat.ideacallgraph.toolWindow.MyToolWindowFactory" id="Call Graph"/>
-        <postStartupActivity implementation="com.github.rccccat.ideacallgraph.startup.MyProjectActivity" />
         <applicationConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings" 
                                 instance="com.github.rccccat.ideacallgraph.settings.CallGraphConfigurable"/>
+        <applicationConfigurable groupId="tools" displayName="Call Graph LLM" id="callgraph.llm.settings" 
+                                instance="com.github.rccccat.ideacallgraph.llm.LLMConfigurable"/>
+        <notificationGroup id="Call Graph" displayType="BALLOON" isLogByDefault="false"/>
     </extensions>
 
     <actions>
@@ -23,6 +25,7 @@
                 text="Generate Call Graph" 
                 description="Generate call graph for the selected method or function">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt G"/>
         </action>
     </actions>
 </idea-plugin>

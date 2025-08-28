@@ -35,6 +35,8 @@ class CallGraphTreeRenderer : ColoredTreeCellRenderer() {
             CallGraphNode.NodeType.SPRING_SERVICE_METHOD -> AllIcons.Nodes.Services
             CallGraphNode.NodeType.JAVA_METHOD -> AllIcons.Nodes.Method
             CallGraphNode.NodeType.KOTLIN_FUNCTION -> AllIcons.Nodes.Function
+            CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD -> AllIcons.Nodes.Interface
+            CallGraphNode.NodeType.MYBATIS_SQL_STATEMENT -> AllIcons.FileTypes.Config
         }
         
         // Add HTTP methods for Spring endpoints
@@ -45,6 +47,16 @@ class CallGraphTreeRenderer : ColoredTreeCellRenderer() {
         // Add service indicator for Spring services
         if (node.nodeType == CallGraphNode.NodeType.SPRING_SERVICE_METHOD) {
             append("[Service] ", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+        }
+        
+        // Add MyBatis indicators
+        if (node.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD) {
+            append("[Mapper] ", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+        }
+        
+        if (node.nodeType == CallGraphNode.NodeType.MYBATIS_SQL_STATEMENT) {
+            val sqlType = node.sqlType?.name ?: "SQL"
+            append("[$sqlType] ", SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES)
         }
         
         // Add class name if available

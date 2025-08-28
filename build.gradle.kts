@@ -36,6 +36,9 @@ dependencies {
     
     // Add Gson for JSON export
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Add OpenAI Java SDK for LLM integration
+    implementation("com.openai:openai-java:3.1.2")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {

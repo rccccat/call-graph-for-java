@@ -4,13 +4,19 @@ import com.github.rccccat.ideacallgraph.export.CallGraphJsonExporter
 import com.github.rccccat.ideacallgraph.model.CallGraph
 import com.github.rccccat.ideacallgraph.model.CallGraphNode
 import com.github.rccccat.ideacallgraph.ui.CallGraphTreeRenderer
+import com.github.rccccat.ideacallgraph.llm.LLMService
+import com.github.rccccat.ideacallgraph.llm.LLMSettings
+import com.github.rccccat.ideacallgraph.llm.LLMAnalysisDialog
 import com.intellij.openapi.actionSystem.*
-import com.intellij.openapi.fileChooser.FileChooserFactory
-import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.pom.Navigatable
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiManager
+import com.intellij.psi.xml.XmlFile
+import com.intellij.psi.xml.XmlTag
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.PopupHandler
@@ -18,13 +24,11 @@ import com.intellij.ui.treeStructure.Tree
 import java.awt.BorderLayout
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import java.io.IOException
 import javax.swing.JLabel
 import javax.swing.JToolBar
 import javax.swing.tree.DefaultMutableTreeNode
 import javax.swing.tree.DefaultTreeModel
 import javax.swing.tree.TreeNode
-import javax.swing.tree.TreePath
 
 /**
  * Tool window content for displaying call graphs
@@ -82,6 +86,7 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
         
         val actionGroup = DefaultActionGroup().apply {
             add(ExportToJsonAction())
+            add(AnalyzeWithLLMAction())
         }
         
         val actionToolbar = ActionManager.getInstance().createActionToolbar(
@@ -117,6 +122,12 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
     private fun navigateToNode(node: CallGraphNode) {
         val element = node.elementPointer.element ?: return
         
+        // Special handling for MyBatis SQL nodes
+        if (node.nodeType == CallGraphNode.NodeType.MYBATIS_SQL_STATEMENT) {
+            navigateToSqlNode(node, element)
+            return
+        }
+        
         // Check if the element is navigatable
         if (element is Navigatable && element.canNavigate()) {
             element.navigate(true)
@@ -147,6 +158,67 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
                 }
             }
         }
+    }
+
+    private fun navigateToSqlNode(node: CallGraphNode, element: PsiElement) {
+        // For XML-based SQL statements, navigate directly to the XML tag
+        if (element is XmlTag) {
+            if (element is Navigatable && element.canNavigate()) {
+                element.navigate(true)
+                return
+            }
+        }
+        
+        // Fallback: try to open XML file by path if we have it
+        if (node.xmlFilePath != null) {
+            try {
+                val virtualFile = LocalFileSystem.getInstance().findFileByPath(node.xmlFilePath!!)
+                if (virtualFile != null) {
+                    val fileEditorManager = FileEditorManager.getInstance(project)
+                    
+                    // Try to find the specific SQL tag and navigate to it
+                    val psiFile = PsiManager.getInstance(project).findFile(virtualFile)
+                    if (psiFile is XmlFile) {
+                        val rootTag = psiFile.rootTag
+                        if (rootTag != null) {
+                            // Extract method name from node name (remove sql type prefix)
+                            val methodName = node.name.substringAfter("_")
+                            val sqlTag = findSqlTagById(rootTag, methodName)
+                            
+                            if (sqlTag != null && sqlTag is Navigatable && sqlTag.canNavigate()) {
+                                sqlTag.navigate(true)
+                                return
+                            }
+                        }
+                    }
+                    
+                    // Fallback: just open the XML file
+                    fileEditorManager.openFile(virtualFile, true)
+                }
+            } catch (e: Exception) {
+                // Log error and fallback to default navigation
+            }
+        }
+        
+        // Final fallback: navigate to the original mapper method
+        if (element is Navigatable && element.canNavigate()) {
+            element.navigate(true)
+        }
+    }
+
+    private fun findSqlTagById(rootTag: XmlTag, methodId: String): XmlTag? {
+        val sqlTags = listOf("select", "insert", "update", "delete")
+        
+        for (child in rootTag.subTags) {
+            if (child.name.lowercase() in sqlTags) {
+                val id = child.getAttributeValue("id")
+                if (id == methodId) {
+                    return child
+                }
+            }
+        }
+        
+        return null
     }
 
     private fun showContextMenu(component: java.awt.Component, x: Int, y: Int) {
@@ -204,6 +276,25 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
                     appendLine("Spring Endpoint: ${node.springMapping}")
                     appendLine("HTTP Methods: ${node.httpMethods.joinToString(", ")}")
                 }
+                if (node.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD) {
+                    appendLine("MyBatis Mapper Method: true")
+                    if (node.sqlType != null) {
+                        appendLine("SQL Type: ${node.sqlType}")
+                    }
+                    if (node.xmlFilePath != null) {
+                        appendLine("XML File: ${node.xmlFilePath}")
+                    }
+                }
+                if (node.nodeType == CallGraphNode.NodeType.MYBATIS_SQL_STATEMENT) {
+                    appendLine("MyBatis SQL Statement: true")
+                    appendLine("SQL Type: ${node.sqlType}")
+                    if (node.sqlStatement != null) {
+                        appendLine("SQL: ${node.sqlStatement}")
+                    }
+                    if (node.xmlFilePath != null) {
+                        appendLine("XML File: ${node.xmlFilePath}")
+                    }
+                }
             }
             
             Messages.showInfoMessage(project, info, "Method Information")
@@ -211,7 +302,7 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
     }
 
     // Export JSON Action
-    private inner class ExportToJsonAction : AnAction("Export to JSON", "Export call graph to JSON format", null) {
+    private inner class ExportToJsonAction : AnAction("View JSON", "View call graph in JSON format", null) {
         
         override fun actionPerformed(e: AnActionEvent) {
             val callGraph = currentCallGraph
@@ -224,42 +315,86 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
                 return
             }
             
-            val fileChooserDescriptor = FileSaverDescriptor(
-                "Export Call Graph",
-                "Save call graph as JSON file",
-                "json"
-            )
+            val exporter = CallGraphJsonExporter()
+            val json = exporter.exportToJson(callGraph)
             
-            val fileChooser = FileChooserFactory.getInstance().createSaveFileDialog(
-                fileChooserDescriptor,
-                project
+            // Show JSON in preview dialog
+            val dialog = com.github.rccccat.ideacallgraph.ui.JsonPreviewDialog(
+                project,
+                json,
+                "${callGraph.rootNode.className}.${callGraph.rootNode.name}"
             )
-            
-            val fileWrapper = fileChooser.save(null as com.intellij.openapi.vfs.VirtualFile?, "call-graph.json")
-            if (fileWrapper != null) {
-                try {
-                    val exporter = CallGraphJsonExporter()
-                    val json = exporter.exportToJson(callGraph)
-                    
-                    fileWrapper.getFile().writeText(json)
-                    
-                    Messages.showInfoMessage(
-                        project,
-                        "Call graph exported successfully to ${fileWrapper.getFile().name}",
-                        "Export Success"
-                    )
-                } catch (e: IOException) {
-                    Messages.showErrorDialog(
-                        project,
-                        "Failed to export call graph: ${e.message}",
-                        "Export Error"
-                    )
-                }
-            }
+            dialog.show()
         }
 
         override fun update(e: AnActionEvent) {
             e.presentation.isEnabled = currentCallGraph != null
+        }
+    }
+
+    // Analyze with LLM Action
+    private inner class AnalyzeWithLLMAction : AnAction("AI Analysis", "Analyze call graph using AI", null) {
+        
+        override fun actionPerformed(e: AnActionEvent) {
+            val callGraph = currentCallGraph
+            if (callGraph == null) {
+                Messages.showWarningDialog(
+                    project,
+                    "No call graph available to analyze",
+                    "Analysis Warning"
+                )
+                return
+            }
+
+            val llmSettings = LLMSettings.getInstance()
+            val llmService = LLMService.getInstance()
+            
+            // Validate settings
+            val validationErrors = llmService.validateSettings()
+            if (validationErrors.isNotEmpty()) {
+                Messages.showWarningDialog(
+                    project,
+                    "LLM configuration issues:\n\n${validationErrors.joinToString("\n")}",
+                    "Configuration Error"
+                )
+                return
+            }
+
+            // Perform analysis
+            llmService.analyzeCallGraphWithProgress(
+                project = project,
+                callGraph = callGraph,
+                onSuccess = { analysis ->
+                    val dialog = LLMAnalysisDialog(
+                        project,
+                        analysis,
+                        "${callGraph.rootNode.className}.${callGraph.rootNode.name}"
+                    )
+                    dialog.show()
+                },
+                onError = { error ->
+                    Messages.showErrorDialog(
+                        project,
+                        "Failed to analyze call graph with LLM:\n\n${error.message}",
+                        "Analysis Error"
+                    )
+                }
+            )
+        }
+
+        override fun update(e: AnActionEvent) {
+            val hasCallGraph = currentCallGraph != null
+            val llmEnabled = LLMSettings.getInstance().enabled
+            
+            e.presentation.isEnabled = hasCallGraph && llmEnabled
+            
+            if (!llmEnabled) {
+                e.presentation.text = "AI Analysis (Disabled)"
+                e.presentation.description = "Enable LLM analysis in settings to use this feature"
+            } else {
+                e.presentation.text = "AI Analysis"
+                e.presentation.description = "Analyze call graph using AI"
+            }
         }
     }
 
@@ -322,6 +457,8 @@ class CallGraphToolWindowContent(private val project: Project) : JBPanel<CallGra
             val prefix = when {
                 node.isSpringEndpoint -> "[${node.httpMethods.joinToString(",")}] "
                 node.nodeType == CallGraphNode.NodeType.SPRING_SERVICE_METHOD -> "[Service] "
+                node.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD -> "[Mapper] "
+                node.nodeType == CallGraphNode.NodeType.MYBATIS_SQL_STATEMENT -> "[${node.sqlType?.name}] "
                 else -> ""
             }
             

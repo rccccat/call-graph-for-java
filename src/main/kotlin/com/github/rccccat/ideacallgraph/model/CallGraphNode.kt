@@ -18,13 +18,26 @@ data class CallGraphNode(
     val isSpringEndpoint: Boolean = false,
     val springMapping: String? = null,
     val httpMethods: List<String> = emptyList(),
-    val isProjectCode: Boolean = true
+    val isProjectCode: Boolean = true,
+    // MyBatis specific fields
+    val sqlType: SqlType? = null,
+    val sqlStatement: String? = null,
+    val xmlFilePath: String? = null
 ) {
     enum class NodeType {
         JAVA_METHOD,
         KOTLIN_FUNCTION,
         SPRING_CONTROLLER_METHOD,
-        SPRING_SERVICE_METHOD
+        SPRING_SERVICE_METHOD,
+        MYBATIS_MAPPER_METHOD,
+        MYBATIS_SQL_STATEMENT
+    }
+
+    enum class SqlType {
+        SELECT,
+        INSERT,
+        UPDATE,
+        DELETE
     }
 
     override fun equals(other: Any?): Boolean {
@@ -50,7 +63,8 @@ data class CallGraphEdge(
         DIRECT_CALL,
         REFLECTION_CALL,
         SPRING_INJECTION,
-        INTERFACE_CALL
+        INTERFACE_CALL,
+        MYBATIS_SQL_CALL
     }
 }
 

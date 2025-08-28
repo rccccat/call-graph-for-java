@@ -4,6 +4,7 @@ import com.github.rccccat.ideacallgraph.model.CallGraph
 import com.github.rccccat.ideacallgraph.model.CallGraphEdge
 import com.github.rccccat.ideacallgraph.model.CallGraphNode
 import com.github.rccccat.ideacallgraph.settings.CallGraphSettings
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.*
@@ -21,6 +22,7 @@ class CallGraphAnalyzer(private val project: Project) {
 
     private val nodeFactory = CallGraphNodeFactory(project)
     private val springAnalyzer = SpringCallGraphAnalyzer()
+    private val mybatisAnalyzer = MyBatisCallGraphAnalyzer(project)
     private val settings = CallGraphSettings.getInstance()
 
     /**
@@ -60,6 +62,18 @@ class CallGraphAnalyzer(private val project: Project) {
             nodes.add(calleeNode)
             edges.add(CallGraphEdge(currentNode, calleeNode, callee.callType))
             
+            // Check if this is a MyBatis mapper method and create SQL node
+            if (callee.target is PsiMethod && calleeNode.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD) {
+                val mybatisInfo = mybatisAnalyzer.analyzeMapperMethod(callee.target as PsiMethod)
+                if (mybatisInfo.isMapperMethod && mybatisInfo.sqlType != null) {
+                    val sqlNode = nodeFactory.createSqlNode(callee.target as PsiMethod, mybatisInfo)
+                    if (sqlNode != null) {
+                        nodes.add(sqlNode)
+                        edges.add(CallGraphEdge(calleeNode, sqlNode, CallGraphEdge.CallType.MYBATIS_SQL_CALL))
+                    }
+                }
+            }
+            
             // Determine if the called method is in project code or third-party library
             val calleeIsProjectCode = isProjectCode(callee.target)
             val nextDepth = if (calleeIsProjectCode) {
@@ -75,14 +89,16 @@ class CallGraphAnalyzer(private val project: Project) {
     }
 
     private fun findCallees(element: PsiElement): List<CalleeInfo> {
-        val callees = mutableListOf<CalleeInfo>()
-        
-        when (element) {
-            is PsiMethod -> findJavaCallees(element, callees)
-            is KtNamedFunction -> findKotlinCallees(element, callees)
+        return ReadAction.compute<List<CalleeInfo>, Exception> {
+            val callees = mutableListOf<CalleeInfo>()
+            
+            when (element) {
+                is PsiMethod -> findJavaCallees(element, callees)
+                is KtNamedFunction -> findKotlinCallees(element, callees)
+            }
+            
+            callees
         }
-        
-        return callees
     }
 
     private fun findJavaCallees(method: PsiMethod, callees: MutableList<CalleeInfo>) {
@@ -131,21 +147,23 @@ class CallGraphAnalyzer(private val project: Project) {
     }
 
     private fun determineJavaCallType(expression: PsiMethodCallExpression, method: PsiMethod): CallGraphEdge.CallType {
-        // Check for Spring-specific patterns
-        springAnalyzer.analyzeCallType(expression, method)?.let { return it }
-        
-        // Check for reflection calls
-        if (isReflectionCall(expression)) {
-            return CallGraphEdge.CallType.REFLECTION_CALL
+        return ReadAction.compute<CallGraphEdge.CallType, Exception> {
+            // Check for Spring-specific patterns
+            springAnalyzer.analyzeCallType(expression, method)?.let { return@compute it }
+            
+            // Check for reflection calls
+            if (isReflectionCall(expression)) {
+                return@compute CallGraphEdge.CallType.REFLECTION_CALL
+            }
+            
+            // Check for interface calls
+            val containingClass = method.containingClass
+            if (containingClass?.isInterface == true) {
+                return@compute CallGraphEdge.CallType.INTERFACE_CALL
+            }
+            
+            CallGraphEdge.CallType.DIRECT_CALL
         }
-        
-        // Check for interface calls
-        val containingClass = method.containingClass
-        if (containingClass?.isInterface == true) {
-            return CallGraphEdge.CallType.INTERFACE_CALL
-        }
-        
-        return CallGraphEdge.CallType.DIRECT_CALL
     }
 
     private fun determineKotlinCallType(expression: KtCallExpression, target: PsiElement): CallGraphEdge.CallType {
@@ -154,91 +172,99 @@ class CallGraphAnalyzer(private val project: Project) {
     }
 
     private fun shouldSkipMethod(element: PsiElement): Boolean {
-        return when (element) {
-            is PsiMethod -> {
-                val className = element.containingClass?.qualifiedName
-                val methodName = element.name
-                
-                // Check against exclude package patterns
-                if (className != null) {
-                    for (pattern in settings.excludePackagePatterns) {
-                        if (Regex(pattern).matches(className)) {
-                            return true
+        return ReadAction.compute<Boolean, Exception> {
+            when (element) {
+                is PsiMethod -> {
+                    val className = element.containingClass?.qualifiedName
+                    val methodName = element.name
+                    
+                    // Check against exclude package patterns
+                    if (className != null) {
+                        for (pattern in settings.excludePackagePatterns) {
+                            if (Regex(pattern).matches(className)) {
+                                return@compute true
+                            }
                         }
                     }
-                }
-                
-                // Check method filtering options
-                if (!settings.includeGettersSetters) {
-                    if (methodName.startsWith("get") || methodName.startsWith("set") || methodName.startsWith("is")) {
-                        return true
+                    
+                    // Check method filtering options
+                    if (!settings.includeGettersSetters) {
+                        if (methodName.startsWith("get") || methodName.startsWith("set") || methodName.startsWith("is")) {
+                            return@compute true
+                        }
                     }
-                }
-                
-                if (!settings.includeToString && methodName == "toString") {
-                    return true
-                }
-                
-                if (!settings.includeHashCodeEquals && (methodName == "equals" || methodName == "hashCode")) {
-                    return true
-                }
-                
-                false
-            }
-            is KtNamedFunction -> {
-                val functionName = element.name
-                val packageName = element.containingKtFile.packageFqName.asString()
-                
-                // Check against exclude package patterns
-                for (pattern in settings.excludePackagePatterns) {
-                    if (Regex(pattern).matches(packageName)) {
-                        return true
+                    
+                    if (!settings.includeToString && methodName == "toString") {
+                        return@compute true
                     }
+                    
+                    if (!settings.includeHashCodeEquals && (methodName == "equals" || methodName == "hashCode")) {
+                        return@compute true
+                    }
+                    
+                    false
                 }
-                
-                // Check method filtering options for Kotlin
-                if (!settings.includeToString && functionName == "toString") {
-                    return true
+                is KtNamedFunction -> {
+                    val functionName = element.name
+                    val packageName = element.containingKtFile.packageFqName.asString()
+                    
+                    // Check against exclude package patterns
+                    for (pattern in settings.excludePackagePatterns) {
+                        if (Regex(pattern).matches(packageName)) {
+                            return@compute true
+                        }
+                    }
+                    
+                    // Check method filtering options for Kotlin
+                    if (!settings.includeToString && functionName == "toString") {
+                        return@compute true
+                    }
+                    
+                    if (!settings.includeHashCodeEquals && (functionName == "equals" || functionName == "hashCode")) {
+                        return@compute true
+                    }
+                    
+                    // Skip common Kotlin standard functions
+                    functionName in listOf("copy", "component1", "component2", "component3", "component4", "component5")
                 }
-                
-                if (!settings.includeHashCodeEquals && (functionName == "equals" || functionName == "hashCode")) {
-                    return true
-                }
-                
-                // Skip common Kotlin standard functions
-                functionName in listOf("copy", "component1", "component2", "component3", "component4", "component5")
+                else -> false
             }
-            else -> false
         }
     }
 
     private fun isProjectCode(element: PsiElement): Boolean {
-        val containingFile = element.containingFile
-        if (containingFile == null) return false
-        
-        val virtualFile = containingFile.virtualFile
-        if (virtualFile == null) return false
-        
-        // Check if it's in project source roots
-        val fileIndex = ProjectFileIndex.getInstance(project)
-        
-        // It's project code if it's in source content or test content
-        return fileIndex.isInSourceContent(virtualFile) || fileIndex.isInTestSourceContent(virtualFile)
+        return ReadAction.compute<Boolean, Exception> {
+            val containingFile = element.containingFile
+            if (containingFile == null) return@compute false
+            
+            val virtualFile = containingFile.virtualFile
+            if (virtualFile == null) return@compute false
+            
+            // Check if it's in project source roots
+            val fileIndex = ProjectFileIndex.getInstance(project)
+            
+            // It's project code if it's in source content or test content
+            fileIndex.isInSourceContent(virtualFile) || fileIndex.isInTestSourceContent(virtualFile)
+        }
     }
 
     private fun isSystemMethod(method: PsiMethod): Boolean {
-        val className = method.containingClass?.qualifiedName ?: return false
-        return className.startsWith("java.") || 
-               className.startsWith("javax.") ||
-               className.startsWith("kotlin.") ||
-               className.startsWith("kotlinx.")
+        return ReadAction.compute<Boolean, Exception> {
+            val className = method.containingClass?.qualifiedName ?: return@compute false
+            className.startsWith("java.") || 
+                   className.startsWith("javax.") ||
+                   className.startsWith("kotlin.") ||
+                   className.startsWith("kotlinx.")
+        }
     }
 
     private fun isSystemFunction(function: KtNamedFunction): Boolean {
-        val containingClass = function.containingClass()
-        val packageName = function.containingKtFile.packageFqName.asString()
-        return packageName.startsWith("kotlin.") || 
-               packageName.startsWith("kotlinx.")
+        return ReadAction.compute<Boolean, Exception> {
+            val containingClass = function.containingClass()
+            val packageName = function.containingKtFile.packageFqName.asString()
+            packageName.startsWith("kotlin.") || 
+                   packageName.startsWith("kotlinx.")
+        }
     }
 
     private fun isReflectionCall(expression: PsiMethodCallExpression): Boolean {

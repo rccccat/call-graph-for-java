@@ -1,6 +1,7 @@
 package com.github.rccccat.ideacallgraph.analysis
 
 import com.github.rccccat.ideacallgraph.model.CallGraphNode
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.*
@@ -14,15 +15,18 @@ import org.jetbrains.kotlin.psi.psiUtil.containingClass
 class CallGraphNodeFactory(private val project: Project) {
 
     private val springAnalyzer = SpringCallGraphAnalyzer()
+    private val mybatisAnalyzer = MyBatisCallGraphAnalyzer(project)
 
     /**
      * Creates a CallGraphNode from a PSI element (method or function)
      */
     fun createNode(element: PsiElement): CallGraphNode? {
-        return when (element) {
-            is PsiMethod -> createFromJavaMethod(element)
-            is KtNamedFunction -> createFromKotlinFunction(element)
-            else -> null
+        return ReadAction.compute<CallGraphNode?, Exception> {
+            when (element) {
+                is PsiMethod -> createFromJavaMethod(element)
+                is KtNamedFunction -> createFromKotlinFunction(element)
+                else -> null
+            }
         }
     }
 
@@ -39,9 +43,13 @@ class CallGraphNodeFactory(private val project: Project) {
         // Check if this is a Spring endpoint
         val springInfo = springAnalyzer.analyzeMethod(method)
         
+        // Check if this is a MyBatis mapper method
+        val mybatisInfo = mybatisAnalyzer.analyzeMapperMethod(method)
+        
         val nodeType = when {
             springInfo.isController -> CallGraphNode.NodeType.SPRING_CONTROLLER_METHOD
             springInfo.isService -> CallGraphNode.NodeType.SPRING_SERVICE_METHOD
+            mybatisInfo.isMapperMethod -> CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD
             else -> CallGraphNode.NodeType.JAVA_METHOD
         }
         
@@ -58,7 +66,10 @@ class CallGraphNodeFactory(private val project: Project) {
             isSpringEndpoint = springInfo.isEndpoint,
             springMapping = springInfo.mapping,
             httpMethods = springInfo.httpMethods,
-            isProjectCode = isProjectCode
+            isProjectCode = isProjectCode,
+            sqlType = mybatisInfo.sqlType,
+            sqlStatement = mybatisInfo.sqlStatement,
+            xmlFilePath = mybatisInfo.xmlFilePath
         )
     }
 
@@ -87,6 +98,13 @@ class CallGraphNodeFactory(private val project: Project) {
             nodeType = CallGraphNode.NodeType.KOTLIN_FUNCTION,
             isProjectCode = isProjectCode
         )
+    }
+
+    /**
+     * Creates a CallGraphNode for a MyBatis SQL statement
+     */
+    fun createSqlNode(mapperMethod: PsiMethod, mybatisInfo: MyBatisCallGraphAnalyzer.MyBatisMethodInfo): CallGraphNode? {
+        return mybatisAnalyzer.createSqlNode(mapperMethod, mybatisInfo)
     }
 
     private fun buildJavaSignature(method: PsiMethod): String {

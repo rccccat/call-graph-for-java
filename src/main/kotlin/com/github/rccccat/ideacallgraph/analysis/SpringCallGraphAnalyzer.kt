@@ -42,6 +42,16 @@ class SpringCallGraphAnalyzer {
             "javax.annotation.Resource",
             "jakarta.annotation.Resource"
         )
+
+        private val QUALIFIER_ANNOTATIONS = setOf(
+            "Qualifier",
+            "org.springframework.beans.factory.annotation.Qualifier"
+        )
+
+        private val PRIMARY_ANNOTATIONS = setOf(
+            "Primary",
+            "org.springframework.context.annotation.Primary"
+        )
     }
 
     /**
@@ -81,7 +91,76 @@ class SpringCallGraphAnalyzer {
             }
         }
         
+        // Check if this is a call to an interface method that might be implemented by a Spring component
+        val containingClass = targetMethod.containingClass
+        if (containingClass?.isInterface == true) {
+            return CallGraphEdge.CallType.INTERFACE_CALL
+        }
+        
         return null
+    }
+
+    /**
+     * Enhanced method to detect Spring injection patterns including constructor and setter injection
+     */
+    fun detectInjectionPattern(method: PsiMethod, targetClass: PsiClass): InjectionPattern? {
+        // Check for field injection
+        val fields = targetClass.fields
+        for (field in fields) {
+            if (hasAnyAnnotation(field, INJECTION_ANNOTATIONS)) {
+                val fieldType = field.type
+                if (isCompatibleType(fieldType, method.containingClass)) {
+                    return InjectionPattern.FIELD_INJECTION
+                }
+            }
+        }
+        
+        // Check for constructor injection
+        val constructors = targetClass.constructors
+        for (constructor in constructors) {
+            if (hasAnyAnnotation(constructor, INJECTION_ANNOTATIONS) || 
+                (constructors.size == 1 && constructor.parameterList.parametersCount > 0)) {
+                val parameters = constructor.parameterList.parameters
+                for (param in parameters) {
+                    if (isCompatibleType(param.type, method.containingClass)) {
+                        return InjectionPattern.CONSTRUCTOR_INJECTION
+                    }
+                }
+            }
+        }
+        
+        // Check for setter injection
+        val methods = targetClass.methods
+        for (setterMethod in methods) {
+            if (setterMethod.name.startsWith("set") && 
+                hasAnyAnnotation(setterMethod, INJECTION_ANNOTATIONS)) {
+                val parameters = setterMethod.parameterList.parameters
+                if (parameters.size == 1 && isCompatibleType(parameters[0].type, method.containingClass)) {
+                    return InjectionPattern.SETTER_INJECTION
+                }
+            }
+        }
+        
+        return null
+    }
+
+    private fun isCompatibleType(type: PsiType, targetClass: PsiClass?): Boolean {
+        if (targetClass == null) return false
+        
+        val typeClassName = type.canonicalText
+        val targetClassName = targetClass.qualifiedName
+        
+        // Direct type match
+        if (typeClassName == targetClassName) return true
+        
+        // Interface compatibility check
+        if (targetClass.isInterface) {
+            return typeClassName == targetClassName
+        }
+        
+        // Check if target class implements the type interface
+        val interfaces = targetClass.interfaces
+        return interfaces.any { it.qualifiedName == typeClassName }
     }
 
     private fun analyzeMappingAnnotations(method: PsiMethod, containingClass: PsiClass): MappingInfo {
@@ -219,4 +298,167 @@ class SpringCallGraphAnalyzer {
         val path: String? = null,
         val httpMethods: List<String> = emptyList()
     )
+
+    enum class InjectionPattern {
+        FIELD_INJECTION,
+        CONSTRUCTOR_INJECTION,
+        SETTER_INJECTION
+    }
+
+    /**
+     * Enhanced Spring injection analysis with @Primary/@Qualifier support
+     */
+    fun analyzeSpringInjection(
+        injectionPoint: PsiElement,
+        targetInterface: PsiClass,
+        implementations: List<PsiClass>
+    ): SpringInjectionResult {
+        // Extract qualifier from injection point
+        val qualifierValue = extractQualifier(injectionPoint)
+        
+        // Check for collection injection
+        val injectionType = determineInjectionType(injectionPoint)
+        if (injectionType.isCollection) {
+            return SpringInjectionResult(
+                selectedImplementations = implementations,
+                injectionType = injectionType,
+                reason = "Collection injection - all implementations included"
+            )
+        }
+        
+        // Filter implementations based on qualifier and primary
+        val filteredImplementations = filterImplementationsByPriority(
+            implementations, 
+            qualifierValue
+        )
+        
+        return SpringInjectionResult(
+            selectedImplementations = filteredImplementations,
+            injectionType = injectionType,
+            reason = buildResolutionReason(filteredImplementations, qualifierValue)
+        )
+    }
+
+    private fun extractQualifier(element: PsiElement): String? {
+        return when (element) {
+            is PsiField -> extractQualifierFromAnnotations(element.modifierList)
+            is PsiParameter -> extractQualifierFromAnnotations(element.modifierList)
+            is PsiMethod -> extractQualifierFromAnnotations(element.modifierList)
+            else -> null
+        }
+    }
+
+    private fun extractQualifierFromAnnotations(modifierList: PsiModifierList?): String? {
+        if (modifierList == null) return null
+        
+        return modifierList.annotations
+            .find { hasAnyAnnotation(it, QUALIFIER_ANNOTATIONS) }
+            ?.findAttributeValue("value")
+            ?.let { extractStringValue(it) }
+    }
+
+    private fun determineInjectionType(element: PsiElement): InjectionType {
+        val type = when (element) {
+            is PsiField -> element.type
+            is PsiParameter -> element.type
+            else -> return InjectionType.SINGLE
+        }
+        
+        val typeText = type.canonicalText
+        
+        return when {
+            typeText.startsWith("java.util.List<") || typeText.startsWith("kotlin.collections.List<") -> 
+                InjectionType.LIST
+            typeText.startsWith("java.util.Map<java.lang.String,") || typeText.startsWith("kotlin.collections.Map<kotlin.String,") -> 
+                InjectionType.MAP
+            typeText.startsWith("java.util.Set<") || typeText.startsWith("kotlin.collections.Set<") -> 
+                InjectionType.SET
+            else -> InjectionType.SINGLE
+        }
+    }
+
+    private fun filterImplementationsByPriority(
+        implementations: List<PsiClass>,
+        qualifierValue: String?
+    ): List<PsiClass> {
+        // If qualifier is specified, find matching implementation
+        if (qualifierValue != null) {
+            val qualifierMatches = implementations.filter { impl ->
+                matchesQualifier(impl, qualifierValue)
+            }
+            if (qualifierMatches.isNotEmpty()) {
+                return qualifierMatches
+            }
+        }
+        
+        // Find @Primary implementations
+        val primaryImplementations = implementations.filter { impl ->
+            hasAnyAnnotation(impl, PRIMARY_ANNOTATIONS)
+        }
+        
+        if (primaryImplementations.isNotEmpty()) {
+            return primaryImplementations
+        }
+        
+        // Return all if no specific priority found
+        return implementations
+    }
+
+    private fun matchesQualifier(implementation: PsiClass, qualifierValue: String): Boolean {
+        // Check if the implementation has a matching @Qualifier
+        val implQualifier = implementation.modifierList?.annotations
+            ?.find { hasAnyAnnotation(it, QUALIFIER_ANNOTATIONS) }
+            ?.findAttributeValue("value")
+            ?.let { extractStringValue(it) }
+        
+        if (implQualifier == qualifierValue) {
+            return true
+        }
+        
+        // Check if the bean name matches (simple class name in camelCase)
+        val beanName = implementation.name?.let { name ->
+            name.substring(0, 1).lowercase() + name.substring(1)
+        }
+        
+        return beanName == qualifierValue
+    }
+
+    private fun buildResolutionReason(
+        implementations: List<PsiClass>,
+        qualifierValue: String?
+    ): String {
+        return when {
+            implementations.isEmpty() -> "No matching implementations found"
+            qualifierValue != null -> "Resolved by @Qualifier(\"$qualifierValue\")"
+            implementations.any { hasAnyAnnotation(it, PRIMARY_ANNOTATIONS) } -> "Resolved by @Primary annotation"
+            implementations.size == 1 -> "Single implementation available"
+            else -> "Multiple implementations - using all (ambiguous injection)"
+        }
+    }
+
+    private fun hasAnyAnnotation(element: PsiElement, annotations: Set<String>): Boolean {
+        return when (element) {
+            is PsiModifierListOwner -> hasAnyAnnotation(element, annotations)
+            is PsiAnnotation -> {
+                val qualifiedName = element.qualifiedName
+                qualifiedName != null && annotations.any { 
+                    qualifiedName.endsWith(it) || qualifiedName == it 
+                }
+            }
+            else -> false
+        }
+    }
+
+    data class SpringInjectionResult(
+        val selectedImplementations: List<PsiClass>,
+        val injectionType: InjectionType,
+        val reason: String
+    )
+
+    enum class InjectionType(val isCollection: Boolean) {
+        SINGLE(false),
+        LIST(true),
+        SET(true),
+        MAP(true)
+    }
 }

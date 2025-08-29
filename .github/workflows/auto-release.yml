@@ -1,0 +1,132 @@
+name: Auto Build & Release
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+      - '.github/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build and Release Plugin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    
+    steps:
+      - name: Fetch Sources
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 21
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Plugin
+        run: ./gradlew buildPlugin
+
+      - name: Run Tests
+        run: ./gradlew test
+        continue-on-error: true
+
+      - name: Get Version and Commit Info
+        id: version
+        run: |
+          VERSION=$(./gradlew properties --property version --quiet --console=plain | tail -n 1 | cut -f2- -d ' ')
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date -u '+%Y%m%d-%H%M')
+          TAG_NAME="v${VERSION}-${TIMESTAMP}-${COMMIT_SHORT}"
+          
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "COMMIT_SHORT=$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          echo "Generated tag: $TAG_NAME"
+
+      - name: Create Release with Plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG_NAME }}
+          name: "Call Graph Plugin ${{ steps.version.outputs.VERSION }} - ${{ steps.version.outputs.COMMIT_SHORT }}"
+          body: |
+            ## 📦 IntelliJ Call Graph Plugin - Auto Release
+            
+            **Version:** `${{ steps.version.outputs.VERSION }}`  
+            **Commit:** [`${{ steps.version.outputs.COMMIT_SHORT }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})  
+            **Build Time:** `${{ steps.version.outputs.TIMESTAMP }}`  
+            **Commit Message:** ${{ github.event.head_commit.message }}
+            
+            ### ✨ Latest Features:
+            - 🔗 Interface implementation resolution with Spring support
+            - 🎯 @Primary/@Qualifier priority resolution  
+            - 📋 Generic collection injection (List, Map, Set)
+            - 🧩 Kotlin extension functions tracking
+            - ⚡ Kotlin delegation and coroutines analysis
+            - 🚀 K2 compiler mode compatibility
+            
+            ### 📥 Installation:
+            1. Download `idea-call-graph-${{ steps.version.outputs.VERSION }}.zip` below
+            2. IntelliJ IDEA → `Settings` → `Plugins` → `⚙️ Install from Disk`
+            3. Select the zip file and restart IDE
+            
+            ### 🔧 Quick Start:
+            - Right-click any method → **"Generate Call Graph"**
+            - Configure: `Settings` → `Tools` → `Call Graph`
+            
+            ---
+            *🤖 This is an automated release triggered by commit to main branch*
+          files: build/distributions/*.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT_SHORT }}
+          path: build/distributions/*.zip
+          retention-days: 30
+
+      - name: Build Summary
+        if: always()
+        run: |
+          echo "## 📊 Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 📦 Plugin Version | \`${{ steps.version.outputs.VERSION }}\` |" >> $GITHUB_STEP_SUMMARY  
+          echo "| 🔗 Commit | [\`${{ steps.version.outputs.COMMIT_SHORT }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🏷️ Release Tag | \`${{ steps.version.outputs.TAG_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⏰ Build Time | \`${{ steps.version.outputs.TIMESTAMP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f build/distributions/*.zip ]; then
+            echo "✅ **Plugin built successfully**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📁 **Generated Files:**" >> $GITHUB_STEP_SUMMARY
+            for file in build/distributions/*.zip; do
+              if [ -f "$file" ]; then
+                size=$(du -h "$file" | cut -f1)
+                echo "- \`$(basename "$file")\` (${size})" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🎯 **Release:** [v${{ steps.version.outputs.VERSION }}](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.TAG_NAME }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Plugin build failed**" >> $GITHUB_STEP_SUMMARY
+          fi

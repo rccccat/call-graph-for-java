@@ -23,6 +23,8 @@ class CallGraphAnalyzer(private val project: Project) {
     private val nodeFactory = CallGraphNodeFactory(project)
     private val springAnalyzer = SpringCallGraphAnalyzer()
     private val mybatisAnalyzer = MyBatisCallGraphAnalyzer(project)
+    private val interfaceResolver = InterfaceImplementationResolver(project)
+    private val kotlinAdvancedAnalyzer = KotlinAdvancedAnalyzer(project)
     private val settings = CallGraphSettings.getInstance()
 
     /**
@@ -56,34 +58,90 @@ class CallGraphAnalyzer(private val project: Project) {
         val callees = findCallees(element)
         for (callee in callees) {
             // Skip certain obvious system methods to reduce noise
-            if (shouldSkipMethod(callee.target)) continue
+            if (callee.target != null && shouldSkipMethod(callee.target!!)) continue
             
-            val calleeNode = nodeFactory.createNode(callee.target) ?: continue
-            nodes.add(calleeNode)
-            edges.add(CallGraphEdge(currentNode, calleeNode, callee.callType))
+            val calleeNode = if (callee.target != null) {
+                nodeFactory.createNode(callee.target!!)
+            } else {
+                // Handle synthetic nodes for coroutines, etc.
+                null
+            }
             
-            // Check if this is a MyBatis mapper method and create SQL node
-            if (callee.target is PsiMethod && calleeNode.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD) {
-                val mybatisInfo = mybatisAnalyzer.analyzeMapperMethod(callee.target as PsiMethod)
-                if (mybatisInfo.isMapperMethod && mybatisInfo.sqlType != null) {
-                    val sqlNode = nodeFactory.createSqlNode(callee.target as PsiMethod, mybatisInfo)
-                    if (sqlNode != null) {
-                        nodes.add(sqlNode)
-                        edges.add(CallGraphEdge(calleeNode, sqlNode, CallGraphEdge.CallType.MYBATIS_SQL_CALL))
+            if (calleeNode != null) {
+                nodes.add(calleeNode)
+                edges.add(CallGraphEdge(currentNode, calleeNode, callee.callType))
+                
+                // Handle interface implementations if enabled
+                if (settings.resolveInterfaceImplementations && callee.callType == CallGraphEdge.CallType.INTERFACE_CALL) {
+                    handleInterfaceImplementations(callee.target!!, calleeNode, nodes, edges, visited, remainingDepth, isProjectCode)
+                }
+                
+                // Check if this is a MyBatis mapper method and create SQL node
+                if (callee.target is PsiMethod && calleeNode.nodeType == CallGraphNode.NodeType.MYBATIS_MAPPER_METHOD) {
+                    val mybatisInfo = mybatisAnalyzer.analyzeMapperMethod(callee.target as PsiMethod)
+                    if (mybatisInfo.isMapperMethod && mybatisInfo.sqlType != null) {
+                        val sqlNode = nodeFactory.createSqlNode(callee.target as PsiMethod, mybatisInfo)
+                        if (sqlNode != null) {
+                            nodes.add(sqlNode)
+                            edges.add(CallGraphEdge(calleeNode, sqlNode, CallGraphEdge.CallType.MYBATIS_SQL_CALL))
+                        }
                     }
                 }
+                
+                // Determine if the called method is in project code or third-party library
+                val calleeIsProjectCode = isProjectCode(callee.target!!)
+                val nextDepth = if (calleeIsProjectCode) {
+                    if (isProjectCode) remainingDepth - 1 else settings.projectMaxDepth - 1
+                } else {
+                    settings.thirdPartyMaxDepth
+                }
+                
+                if (nextDepth > 0) {
+                    buildCallGraphRecursive(calleeNode, nodes, edges, visited, nextDepth, calleeIsProjectCode)
+                }
             }
-            
-            // Determine if the called method is in project code or third-party library
-            val calleeIsProjectCode = isProjectCode(callee.target)
-            val nextDepth = if (calleeIsProjectCode) {
-                if (isProjectCode) remainingDepth - 1 else settings.projectMaxDepth - 1
-            } else {
-                settings.thirdPartyMaxDepth
-            }
-            
-            if (nextDepth > 0) {
-                buildCallGraphRecursive(calleeNode, nodes, edges, visited, nextDepth, calleeIsProjectCode)
+        }
+    }
+
+    private fun handleInterfaceImplementations(
+        interfaceMethod: PsiElement,
+        interfaceNode: CallGraphNode,
+        nodes: MutableSet<CallGraphNode>,
+        edges: MutableSet<CallGraphEdge>,
+        visited: MutableSet<String>,
+        remainingDepth: Int,
+        isProjectCode: Boolean
+    ) {
+        when (interfaceMethod) {
+            is PsiMethod -> {
+                val implementations = interfaceResolver.resolveInterfaceImplementations(interfaceMethod)
+                
+                // Filter implementations based on user settings
+                val relevantImplementations = if (settings.traverseAllImplementations) {
+                    implementations
+                } else {
+                    // Prioritize Spring components and project code
+                    implementations.filter { it.isSpringComponent || it.isProjectCode }
+                        .ifEmpty { implementations.take(1) } // Take at least one if no Spring components found
+                }
+                
+                for (impl in relevantImplementations) {
+                    val implNode = nodeFactory.createNode(impl.implementationMethod) ?: continue
+                    nodes.add(implNode)
+                    edges.add(CallGraphEdge(interfaceNode, implNode, CallGraphEdge.CallType.SPRING_INJECTION))
+                    
+                    // Continue building the graph from the implementation
+                    val implIsProjectCode = isProjectCode(impl.implementationMethod)
+                    val nextDepth = if (implIsProjectCode) {
+                        if (isProjectCode) remainingDepth - 1 else settings.projectMaxDepth - 1
+                    } else {
+                        settings.thirdPartyMaxDepth
+                    }
+                    
+                    if (nextDepth > 0) {
+                        buildCallGraphRecursive(implNode, nodes, edges, visited, nextDepth, implIsProjectCode)
+                    }
+                }
             }
         }
     }
@@ -109,7 +167,28 @@ class CallGraphAnalyzer(private val project: Project) {
                 val resolvedMethod = expression.resolveMethod()
                 if (resolvedMethod != null) {
                     val callType = determineJavaCallType(expression, resolvedMethod)
-                    callees.add(CalleeInfo(resolvedMethod, callType))
+                    
+                    // Enhanced interface resolution with Spring context
+                    if (callType == CallGraphEdge.CallType.INTERFACE_CALL) {
+                        val injectionPoint = findInjectionPoint(expression)
+                        val advancedResult = interfaceResolver.resolveInterfaceImplementationsAdvanced(
+                            resolvedMethod, injectionPoint
+                        )
+                        
+                        // Add resolved implementations with their context
+                        advancedResult.implementations.forEach { impl ->
+                            callees.add(CalleeInfo(
+                                impl.implementationMethod, 
+                                CallGraphEdge.CallType.SPRING_INJECTION,
+                                resolutionContext = impl.resolutionReason
+                            ))
+                        }
+                        
+                        // Also add the original interface call for completeness
+                        callees.add(CalleeInfo(resolvedMethod, callType))
+                    } else {
+                        callees.add(CalleeInfo(resolvedMethod, callType))
+                    }
                 }
             }
             
@@ -125,10 +204,12 @@ class CallGraphAnalyzer(private val project: Project) {
     }
 
     private fun findKotlinCallees(function: KtNamedFunction, callees: MutableList<CalleeInfo>) {
+        // Analyze standard function calls
         function.accept(object : KtVisitorVoid() {
             override fun visitCallExpression(expression: KtCallExpression) {
                 super.visitCallExpression(expression)
                 
+                @Suppress("DEPRECATION")
                 val reference = expression.calleeExpression?.reference
                 val resolved = reference?.resolve()
                 
@@ -143,7 +224,75 @@ class CallGraphAnalyzer(private val project: Project) {
                     }
                 }
             }
+            
+            override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) {
+                super.visitDotQualifiedExpression(expression)
+                
+                // Handle extension function calls
+                val selectorExpression = expression.selectorExpression
+                if (selectorExpression is KtCallExpression) {
+                    val receiverType = expression.receiverExpression.text
+                    val functionName = selectorExpression.calleeExpression?.text
+                    
+                    if (functionName != null) {
+                        // Try to find extension function
+                        val extensionFunction = findExtensionFunction(receiverType, functionName)
+                        if (extensionFunction != null) {
+                            callees.add(CalleeInfo(
+                                extensionFunction, 
+                                CallGraphEdge.CallType.DIRECT_CALL,
+                                resolutionContext = "Extension function on $receiverType"
+                            ))
+                        }
+                    }
+                }
+            }
         })
+        
+        // Analyze extension function calls
+        val extensionCalls = kotlinAdvancedAnalyzer.findExtensionFunctionCalls(function)
+        extensionCalls.forEach { extCall ->
+            if (extCall.extensionFunction != null) {
+                callees.add(CalleeInfo(
+                    extCall.extensionFunction,
+                    CallGraphEdge.CallType.DIRECT_CALL,
+                    resolutionContext = "Extension function: ${extCall.functionName} on ${extCall.receiverType}"
+                ))
+            }
+        }
+        
+        // Analyze coroutine calls
+        val coroutineCalls = kotlinAdvancedAnalyzer.analyzeCoroutines(function)
+        coroutineCalls.forEach { coroutineCall ->
+            callees.add(CalleeInfo(
+                // For now, we create a synthetic element for coroutine calls
+                // In a full implementation, you'd resolve the actual coroutine function
+                null,
+                CallGraphEdge.CallType.DIRECT_CALL,
+                resolutionContext = "Coroutine: ${coroutineCall.functionName} (${coroutineCall.coroutineType})"
+            ))
+        }
+    }
+    
+    private fun findExtensionFunction(receiverType: String, functionName: String): KtNamedFunction? {
+        // This is a simplified search - in practice you'd use proper type resolution
+        return ReadAction.compute<KtNamedFunction?, Exception> {
+            // Search project for extension functions
+            // This would need more sophisticated implementation
+            null
+        }
+    }
+
+    private fun findInjectionPoint(expression: PsiMethodCallExpression): PsiElement? {
+        // Try to find the field or parameter that represents the injection point
+        val qualifier = expression.methodExpression.qualifierExpression
+        if (qualifier is PsiReferenceExpression) {
+            val resolved = qualifier.resolve()
+            if (resolved is PsiField || resolved is PsiParameter) {
+                return resolved
+            }
+        }
+        return null
     }
 
     private fun determineJavaCallType(expression: PsiMethodCallExpression, method: PsiMethod): CallGraphEdge.CallType {
@@ -294,7 +443,8 @@ class CallGraphAnalyzer(private val project: Project) {
     }
 
     private data class CalleeInfo(
-        val target: PsiElement,
-        val callType: CallGraphEdge.CallType
+        val target: PsiElement?,
+        val callType: CallGraphEdge.CallType,
+        val resolutionContext: String? = null
     )
 }

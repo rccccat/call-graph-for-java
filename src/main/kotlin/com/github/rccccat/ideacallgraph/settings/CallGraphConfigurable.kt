@@ -25,6 +25,8 @@ class CallGraphConfigurable : Configurable {
     private lateinit var includeGettersSettersCheckBox: JBCheckBox
     private lateinit var includeToStringCheckBox: JBCheckBox
     private lateinit var includeHashCodeEqualsCheckBox: JBCheckBox
+    private lateinit var resolveInterfaceImplementationsCheckBox: JBCheckBox
+    private lateinit var traverseAllImplementationsCheckBox: JBCheckBox
 
     override fun getDisplayName(): String = "Call Graph"
 
@@ -115,6 +117,23 @@ class CallGraphConfigurable : Configurable {
         includeHashCodeEqualsCheckBox = JBCheckBox("Include hashCode()/equals() methods", settings.includeHashCodeEquals)
         mainPanel!!.add(includeHashCodeEqualsCheckBox, constraints)
 
+        // Interface Resolution Section
+        constraints.gridy++
+        constraints.gridwidth = 2
+        constraints.insets = Insets(20, 0, 10, 0)
+        mainPanel!!.add(JBLabel("<html><b>Interface Implementation Resolution</b></html>"), constraints)
+
+        // Resolve Interface Implementations
+        constraints.gridy++
+        constraints.insets = Insets(5, 20, 5, 0)
+        resolveInterfaceImplementationsCheckBox = JBCheckBox("Resolve interface implementations (Spring @Autowired/@Resource)", settings.resolveInterfaceImplementations)
+        mainPanel!!.add(resolveInterfaceImplementationsCheckBox, constraints)
+
+        // Traverse All Implementations
+        constraints.gridy++
+        traverseAllImplementationsCheckBox = JBCheckBox("Traverse all implementations (otherwise prioritize Spring components)", settings.traverseAllImplementations)
+        mainPanel!!.add(traverseAllImplementationsCheckBox, constraints)
+
         // Help text
         constraints.gridy++
         constraints.gridwidth = 2
@@ -125,7 +144,9 @@ class CallGraphConfigurable : Configurable {
             <b>Tips:</b><br/>
             • Use Java regex patterns for package filtering (e.g., "java\\..*" matches all java packages)<br/>
             • Higher recursion depths provide more complete call graphs but may impact performance<br/>
-            • Method filtering helps reduce noise in the call graph
+            • Method filtering helps reduce noise in the call graph<br/>
+            • Interface resolution is especially useful for Spring dependency injection patterns<br/>
+            • Enable "Traverse all implementations" to see all possible call paths (may increase graph complexity)
             </small>
             </html>
         """.trimIndent()
@@ -142,7 +163,9 @@ class CallGraphConfigurable : Configurable {
                excludePatternsArea.text.split("\n").map { it.trim() }.filter { it.isNotEmpty() } != settings.excludePackagePatterns ||
                includeGettersSettersCheckBox.isSelected != settings.includeGettersSetters ||
                includeToStringCheckBox.isSelected != settings.includeToString ||
-               includeHashCodeEqualsCheckBox.isSelected != settings.includeHashCodeEquals
+               includeHashCodeEqualsCheckBox.isSelected != settings.includeHashCodeEquals ||
+               resolveInterfaceImplementationsCheckBox.isSelected != settings.resolveInterfaceImplementations ||
+               traverseAllImplementationsCheckBox.isSelected != settings.traverseAllImplementations
     }
 
     override fun apply() {
@@ -184,6 +207,8 @@ class CallGraphConfigurable : Configurable {
         settings.setIncludeGettersSetters(includeGettersSettersCheckBox.isSelected)
         settings.setIncludeToString(includeToStringCheckBox.isSelected)
         settings.setIncludeHashCodeEquals(includeHashCodeEqualsCheckBox.isSelected)
+        settings.setResolveInterfaceImplementations(resolveInterfaceImplementationsCheckBox.isSelected)
+        settings.setTraverseAllImplementations(traverseAllImplementationsCheckBox.isSelected)
     }
 
     override fun reset() {
@@ -195,5 +220,7 @@ class CallGraphConfigurable : Configurable {
         includeGettersSettersCheckBox.isSelected = settings.includeGettersSetters
         includeToStringCheckBox.isSelected = settings.includeToString
         includeHashCodeEqualsCheckBox.isSelected = settings.includeHashCodeEquals
+        resolveInterfaceImplementationsCheckBox.isSelected = settings.resolveInterfaceImplementations
+        traverseAllImplementationsCheckBox.isSelected = settings.traverseAllImplementations
     }
 }

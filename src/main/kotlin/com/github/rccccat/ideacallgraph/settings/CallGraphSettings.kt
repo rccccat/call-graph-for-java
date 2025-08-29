@@ -26,7 +26,9 @@ class CallGraphSettings : PersistentStateComponent<CallGraphSettings.State> {
         ),
         var includeGettersSetters: Boolean = false,
         var includeToString: Boolean = false,
-        var includeHashCodeEquals: Boolean = false
+        var includeHashCodeEquals: Boolean = false,
+        var resolveInterfaceImplementations: Boolean = true,
+        var traverseAllImplementations: Boolean = false
     )
 
     private var myState = State()
@@ -44,6 +46,8 @@ class CallGraphSettings : PersistentStateComponent<CallGraphSettings.State> {
     val includeGettersSetters: Boolean get() = myState.includeGettersSetters
     val includeToString: Boolean get() = myState.includeToString
     val includeHashCodeEquals: Boolean get() = myState.includeHashCodeEquals
+    val resolveInterfaceImplementations: Boolean get() = myState.resolveInterfaceImplementations
+    val traverseAllImplementations: Boolean get() = myState.traverseAllImplementations
 
     // Setters
     fun setProjectMaxDepth(depth: Int) {
@@ -68,6 +72,14 @@ class CallGraphSettings : PersistentStateComponent<CallGraphSettings.State> {
 
     fun setIncludeHashCodeEquals(include: Boolean) {
         myState.includeHashCodeEquals = include
+    }
+
+    fun setResolveInterfaceImplementations(resolve: Boolean) {
+        myState.resolveInterfaceImplementations = resolve
+    }
+
+    fun setTraverseAllImplementations(traverse: Boolean) {
+        myState.traverseAllImplementations = traverse
     }
 
     companion object {

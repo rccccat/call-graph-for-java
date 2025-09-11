@@ -35,7 +35,7 @@ dependencies {
     testImplementation(libs.opentest4j)
     
     // Add Gson for JSON export
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.google.code.gson:gson:2.13.2")
     
     // Add OpenAI Java SDK for LLM integration
     implementation("com.openai:openai-java:3.1.2")

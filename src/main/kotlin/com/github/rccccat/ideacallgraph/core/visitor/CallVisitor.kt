@@ -6,19 +6,21 @@ import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiExpression
 
 /** Information about a resolved call target. */
 data class CallTargetInfo(
     val target: PsiElement,
     val resolvedImplementations: List<ImplementationInfo>? = null,
+    /**
+     * The call expression that triggered this target resolution. Used for parameter usage analysis.
+     */
+    val callExpression: PsiExpression? = null,
 )
 
 /** Information about an interface implementation. */
 data class ImplementationInfo(
     val implementationMethod: PsiElement,
-    val implementingClass: String,
-    val isSpringComponent: Boolean,
-    val isProjectCode: Boolean,
 )
 
 /** Context for visitors, providing access to shared services and resolvers. */
@@ -29,15 +31,3 @@ class VisitorContext(
     val interfaceResolver: InterfaceResolver,
     val springAnalyzer: SpringAnalyzer,
 )
-
-/**
- * Visitor interface for finding call targets in code elements. Implementations handle different
- * languages (Java, Kotlin).
- */
-interface CallVisitor {
-  /** Checks if this visitor can handle the given element. */
-  fun canVisit(element: PsiElement): Boolean
-
-  /** Finds all call targets within the given element. */
-  fun findCallTargets(element: PsiElement, context: VisitorContext): List<CallTargetInfo>
-}

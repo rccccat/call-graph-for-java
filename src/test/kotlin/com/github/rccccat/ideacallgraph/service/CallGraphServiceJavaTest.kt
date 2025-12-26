@@ -116,8 +116,8 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val graph = buildGraph(method)
 
     assertEdgeFromHandle(graph, "pay")
-    assertEdgeFromClass(graph, "PaymentService", "StripePaymentService", "pay")
-    assertEdgeFromClass(graph, "PaymentService", "PaypalPaymentService", "pay")
+    assertEdgeFromClass(graph, "OrderController", "StripePaymentService", "pay")
+    assertEdgeFromClass(graph, "OrderController", "PaypalPaymentService", "pay")
     assertEdgeFromClass(graph, "StripePaymentService", "PaymentRepository", "save")
   }
 
@@ -163,8 +163,8 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
 
-    assertEdgeFromClass(graph, "PaymentService", "PaypalPaymentService", "pay")
-    assertNoEdgeFromClass(graph, "PaymentService", "StripePaymentService", "pay")
+    assertEdgeFromClass(graph, "PaymentController", "PaypalPaymentService", "pay")
+    assertNoEdgeFromClass(graph, "PaymentController", "StripePaymentService", "pay")
   }
 
   fun testInterfaceImplementationWithPrimary() {
@@ -207,8 +207,8 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
 
-    assertEdgeFromClass(graph, "Notifier", "PrimaryNotifier", "notifyUser")
-    assertNoEdgeFromClass(graph, "Notifier", "DefaultNotifier", "notifyUser")
+    assertEdgeFromClass(graph, "NotificationController", "PrimaryNotifier", "notifyUser")
+    assertNoEdgeFromClass(graph, "NotificationController", "DefaultNotifier", "notifyUser")
   }
 
   fun testSpringInjectedFieldCall() {
@@ -291,11 +291,11 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val graph = buildGraph(method)
 
     assertEdgeFromHandle(graph, "pay")
-    assertEdgeFromClass(graph, "PaymentService", "PaypalPaymentService", "pay")
-    assertNoEdgeFromClass(graph, "PaymentService", "StripePaymentService", "pay")
+    assertEdgeFromClass(graph, "PaymentController", "PaypalPaymentService", "pay")
+    assertNoEdgeFromClass(graph, "PaymentController", "StripePaymentService", "pay")
   }
 
-  fun testCollectionInjectionIncludesAllImplementations() {
+  fun testCollectionInjectionRespectsPrimary() {
     val file =
         myFixture.addFileToProject(
             "src/demo/CollectionInjectionFlow.java",
@@ -337,8 +337,8 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val graph = buildGraph(method)
 
     assertEdgeFromHandle(graph, "pay")
-    assertEdgeFromClass(graph, "PaymentService", "PrimaryPaymentService", "pay")
-    assertEdgeFromClass(graph, "PaymentService", "SecondaryPaymentService", "pay")
+    assertEdgeFromClass(graph, "PaymentController", "PrimaryPaymentService", "pay")
+    assertNoEdgeFromClass(graph, "PaymentController", "SecondaryPaymentService", "pay")
   }
 
   fun testSpringServiceNodeType() {
@@ -547,42 +547,6 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     assertNoEdgeFromHandle(graph, "run")
   }
 
-  fun testJavaCallsKotlin() {
-    myFixture.addFileToProject(
-        "src/demo/KotlinWorker.kt",
-        """
-        package demo
-        class KotlinWorker {
-            fun work() { }
-        }
-        """
-            .trimIndent(),
-    )
-
-    val file =
-        myFixture.addFileToProject(
-            "src/demo/JavaCaller.java",
-            """
-            package demo;
-            class JavaCaller {
-                void handle() {
-                    new KotlinWorker().work();
-                }
-            }
-            """
-                .trimIndent(),
-        )
-
-    val method = findHandleMethod(file)
-    val graph = buildGraph(method)
-
-    assertTrue(
-        graph.nodes.values.any { node ->
-          node.name == "work" && node.nodeType == NodeType.KOTLIN_FUNCTION
-        },
-    )
-  }
-
   private fun findHandleMethod(file: com.intellij.psi.PsiFile): PsiMethod =
       PsiTreeUtil.findChildrenOfType(file, PsiMethod::class.java).first { it.name == "handle" }
 
@@ -679,6 +643,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
     settings.setTraverseAllImplementations(state.traverseAllImplementations)
+    settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 
   private fun cloneSettings(state: CallGraphAppSettings.State): CallGraphAppSettings.State =

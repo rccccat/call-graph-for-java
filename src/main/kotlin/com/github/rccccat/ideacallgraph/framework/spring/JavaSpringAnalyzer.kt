@@ -8,10 +8,10 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 
 /** Spring analyzer implementation for Java methods. */
-class JavaSpringAnalyzer : SpringElementAnalyzer<PsiMethod> {
-  override fun canAnalyze(element: PsiElement): Boolean = element is PsiMethod
+class JavaSpringAnalyzer {
+  fun canAnalyze(element: PsiElement): Boolean = element is PsiMethod
 
-  override fun analyze(element: PsiMethod): SpringMethodInfo {
+  fun analyze(element: PsiMethod): SpringMethodInfo {
     return ReadAction.compute<SpringMethodInfo, Exception> {
       val containingClass = element.containingClass ?: return@compute SpringMethodInfo.EMPTY
 
@@ -28,7 +28,7 @@ class JavaSpringAnalyzer : SpringElementAnalyzer<PsiMethod> {
     }
   }
 
-  override fun isSpringComponent(element: PsiMethod): Boolean {
+  fun isSpringComponent(element: PsiMethod): Boolean {
     val containingClass = element.containingClass ?: return false
     return hasAnyAnnotation(containingClass, SpringAnnotations.componentAnnotations)
   }

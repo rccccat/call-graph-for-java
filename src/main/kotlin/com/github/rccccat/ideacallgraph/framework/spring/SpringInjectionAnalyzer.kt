@@ -3,7 +3,13 @@ package com.github.rccccat.ideacallgraph.framework.spring
 import com.github.rccccat.ideacallgraph.util.SpringAnnotations
 import com.github.rccccat.ideacallgraph.util.extractFirstStringValue
 import com.github.rccccat.ideacallgraph.util.hasAnyAnnotation
-import com.intellij.psi.*
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiField
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifierList
+import com.intellij.psi.PsiModifierListOwner
+import com.intellij.psi.PsiParameter
 
 /** Analyzer for Spring dependency injection patterns. */
 class SpringInjectionAnalyzer {
@@ -19,23 +25,13 @@ class SpringInjectionAnalyzer {
     // Extract qualifier from injection point
     val qualifierValue = extractQualifier(injectionPoint)
 
-    // Check for collection injection
     val injectionType = determineInjectionType(injectionPoint)
-    if (injectionType.isCollection) {
-      return SpringInjectionResult(
-          selectedImplementations = implementations,
-          injectionType = injectionType,
-          reason = "Collection injection - all implementations included",
-      )
-    }
-
-    // Filter implementations based on qualifier and primary
     val filteredImplementations = filterImplementationsByPriority(implementations, qualifierValue)
 
     return SpringInjectionResult(
         selectedImplementations = filteredImplementations,
         injectionType = injectionType,
-        reason = buildResolutionReason(filteredImplementations, qualifierValue),
+        reason = buildResolutionReason(filteredImplementations, qualifierValue, injectionType),
     )
   }
 
@@ -83,17 +79,12 @@ class SpringInjectionAnalyzer {
     val typeText = type.canonicalText
 
     return when {
-      typeText.startsWith("java.util.List<") ||
-          typeText.startsWith("kotlin.collections.List<") ||
-          typeText.startsWith("List<") -> InjectionType.LIST
+      typeText.startsWith("java.util.List<") || typeText.startsWith("List<") -> InjectionType.LIST
 
-      typeText.startsWith("java.util.Map<java.lang.String,") ||
-          typeText.startsWith("kotlin.collections.Map<kotlin.String,") ||
-          typeText.startsWith("Map<") -> InjectionType.MAP
+      typeText.startsWith("java.util.Map<java.lang.String,") || typeText.startsWith("Map<") ->
+          InjectionType.MAP
 
-      typeText.startsWith("java.util.Set<") ||
-          typeText.startsWith("kotlin.collections.Set<") ||
-          typeText.startsWith("Set<") -> InjectionType.SET
+      typeText.startsWith("java.util.Set<") || typeText.startsWith("Set<") -> InjectionType.SET
 
       else -> InjectionType.SINGLE
     }
@@ -114,9 +105,7 @@ class SpringInjectionAnalyzer {
 
     // Find @Primary implementations
     val primaryImplementations =
-        implementations.filter { impl ->
-          hasAnyAnnotation(impl, SpringAnnotations.primaryAnnotations)
-        }
+        implementations.filter { impl -> hasAnnotation(impl, SpringAnnotations.primaryAnnotations) }
 
     if (primaryImplementations.isNotEmpty()) {
       return primaryImplementations
@@ -149,9 +138,17 @@ class SpringInjectionAnalyzer {
     return beanName == qualifierValue
   }
 
+  private fun hasAnnotation(
+      implementation: PsiClass,
+      annotations: Set<String>,
+  ): Boolean {
+    return hasAnyAnnotation(implementation, annotations)
+  }
+
   private fun buildResolutionReason(
       implementations: List<PsiClass>,
       qualifierValue: String?,
+      injectionType: InjectionType,
   ): String =
       when {
         implementations.isEmpty() -> {
@@ -159,11 +156,23 @@ class SpringInjectionAnalyzer {
         }
 
         qualifierValue != null -> {
-          "Resolved by @Qualifier(\"$qualifierValue\")"
+          if (injectionType.isCollection) {
+            "Collection injection resolved by @Qualifier(\"$qualifierValue\")"
+          } else {
+            "Resolved by @Qualifier(\"$qualifierValue\")"
+          }
         }
 
-        implementations.any { hasAnyAnnotation(it, SpringAnnotations.primaryAnnotations) } -> {
-          "Resolved by @Primary annotation"
+        implementations.any { hasAnnotation(it, SpringAnnotations.primaryAnnotations) } -> {
+          if (injectionType.isCollection) {
+            "Collection injection resolved by @Primary annotation"
+          } else {
+            "Resolved by @Primary annotation"
+          }
+        }
+
+        injectionType.isCollection -> {
+          "Collection injection - all implementations included"
         }
 
         implementations.size == 1 -> {

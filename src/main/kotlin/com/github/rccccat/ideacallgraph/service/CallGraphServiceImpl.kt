@@ -3,11 +3,10 @@ package com.github.rccccat.ideacallgraph.service
 import com.github.rccccat.ideacallgraph.api.CallGraphService
 import com.github.rccccat.ideacallgraph.api.model.CallGraphData
 import com.github.rccccat.ideacallgraph.core.CallGraphBuilder
-import com.github.rccccat.ideacallgraph.core.visitor.CallVisitor
 import com.github.rccccat.ideacallgraph.core.visitor.JavaCallVisitor
-import com.github.rccccat.ideacallgraph.core.visitor.KotlinCallVisitor
 import com.github.rccccat.ideacallgraph.export.CodeExtractor
 import com.github.rccccat.ideacallgraph.export.JsonExporter
+import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraph
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
@@ -19,21 +18,17 @@ class CallGraphServiceImpl(
     private val project: Project,
 ) : CallGraphService {
 
-  private val visitors: List<CallVisitor> =
-      listOf(
-          JavaCallVisitor(),
-          KotlinCallVisitor(),
-      )
+  private val springAnalyzer = SpringAnalyzer()
+  private val visitor = JavaCallVisitor()
   private val jsonExporter = JsonExporter()
   private val codeExtractor = CodeExtractor()
 
   override fun buildCallGraph(startElement: PsiElement): IdeCallGraph? {
-    val registry = AnalyzerRegistry.getInstance()
     val builder =
         CallGraphBuilder(
             project = project,
-            springAnalyzer = registry.springAnalyzer,
-            visitors = visitors,
+            springAnalyzer = springAnalyzer,
+            visitor = visitor,
         )
     return builder.build(startElement)
   }

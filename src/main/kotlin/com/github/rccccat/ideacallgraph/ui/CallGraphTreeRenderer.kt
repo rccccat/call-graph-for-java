@@ -32,7 +32,6 @@ class CallGraphTreeRenderer : ColoredTreeCellRenderer() {
           NodeType.SPRING_CONTROLLER_METHOD -> AllIcons.Nodes.Controller
           NodeType.SPRING_SERVICE_METHOD -> AllIcons.Nodes.Services
           NodeType.JAVA_METHOD -> AllIcons.Nodes.Method
-          NodeType.KOTLIN_FUNCTION -> AllIcons.Nodes.Function
           NodeType.MYBATIS_MAPPER_METHOD -> AllIcons.Nodes.Interface
           NodeType.MYBATIS_SQL_STATEMENT -> AllIcons.FileTypes.Config
         }

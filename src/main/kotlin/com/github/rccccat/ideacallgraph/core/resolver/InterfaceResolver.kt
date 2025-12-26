@@ -2,20 +2,18 @@ package com.github.rccccat.ideacallgraph.core.resolver
 
 import com.github.rccccat.ideacallgraph.core.visitor.ImplementationInfo
 import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
-import com.github.rccccat.ideacallgraph.util.SpringAnnotations
-import com.github.rccccat.ideacallgraph.util.hasAnyAnnotation
-import com.github.rccccat.ideacallgraph.util.isProjectCode
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiSubstitutor
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.util.PsiModificationTracker
 import java.util.concurrent.ConcurrentHashMap
 
-/** Resolver for interface implementations with Spring awareness. */
+/** Resolver for interface implementations and class overrides with Spring awareness. */
 class InterfaceResolver(
     private val project: Project,
     private val springAnalyzer: SpringAnalyzer,
@@ -26,23 +24,23 @@ class InterfaceResolver(
     object Missing : MethodLookupResult
   }
 
-  private val implementingClassesCache = ConcurrentHashMap<String, List<PsiClass>>()
+  private val inheritingClassesCache = ConcurrentHashMap<String, List<PsiClass>>()
   private val implementationMethodCache = ConcurrentHashMap<String, MethodLookupResult>()
   private var lastModificationCount: Long = -1
 
   /**
-   * Resolves interface implementations with Spring DI awareness. Filters based
+   * Resolves interface implementations and class overrides with Spring DI awareness. Filters based
    * on @Primary, @Qualifier, and Spring component status.
    */
-  fun resolveInterfaceImplementationsAdvanced(
-      interfaceMethod: PsiMethod,
+  fun resolveMethodImplementationsAdvanced(
+      baseMethod: PsiMethod,
       injectionPoint: PsiElement? = null,
   ): List<ImplementationInfo> {
     ensureCacheFresh()
-    val containingClass = interfaceMethod.containingClass ?: return emptyList()
-    if (!containingClass.isInterface) return emptyList()
+    val containingClass = baseMethod.containingClass ?: return emptyList()
+    if (!shouldResolveOverrides(baseMethod, containingClass)) return emptyList()
 
-    val implementations = findImplementingClasses(containingClass)
+    val implementations = findInheritingClasses(containingClass)
     if (implementations.isEmpty()) return emptyList()
 
     // If there's an injection point, use Spring's resolution logic
@@ -55,23 +53,34 @@ class InterfaceResolver(
         }
 
     return filteredImplementations.mapNotNull { implClass ->
-      findImplementationMethod(implClass, interfaceMethod)?.let { implMethod ->
+      findImplementationMethod(implClass, baseMethod)?.let { implMethod ->
         ImplementationInfo(
             implementationMethod = implMethod,
-            implementingClass = implClass.qualifiedName ?: implClass.name ?: "",
-            isSpringComponent = hasAnyAnnotation(implClass, SpringAnnotations.componentAnnotations),
-            isProjectCode = isProjectCode(project, implMethod),
         )
       }
     }
   }
 
-  private fun findImplementingClasses(interfaceClass: PsiClass): List<PsiClass> {
-    val key = interfaceClass.qualifiedName ?: return emptyList()
+  private fun shouldResolveOverrides(
+      method: PsiMethod,
+      containingClass: PsiClass,
+  ): Boolean {
+    if (method.isConstructor) return false
+    if (method.hasModifierProperty(PsiModifier.STATIC)) return false
+    if (method.hasModifierProperty(PsiModifier.PRIVATE)) return false
+    if (method.hasModifierProperty(PsiModifier.FINAL)) return false
+    if (!containingClass.isInterface && containingClass.hasModifierProperty(PsiModifier.FINAL)) {
+      return false
+    }
+    return true
+  }
 
-    return implementingClassesCache.getOrPut(key) {
+  private fun findInheritingClasses(baseClass: PsiClass): List<PsiClass> {
+    val key = baseClass.qualifiedName ?: return emptyList()
+
+    return inheritingClassesCache.getOrPut(key) {
       ClassInheritorsSearch.search(
-              interfaceClass,
+              baseClass,
               GlobalSearchScope.allScope(project),
               true,
           )
@@ -83,18 +92,17 @@ class InterfaceResolver(
 
   private fun findImplementationMethod(
       implClass: PsiClass,
-      interfaceMethod: PsiMethod,
+      baseMethod: PsiMethod,
   ): PsiMethod? {
-    val interfaceOwner = interfaceMethod.containingClass?.qualifiedName ?: "Unknown"
-    val signature = interfaceMethod.getSignature(PsiSubstitutor.EMPTY).toString()
-    val key =
-        "${implClass.qualifiedName}#$interfaceOwner#$signature"
+    val baseOwner = baseMethod.containingClass?.qualifiedName ?: "Unknown"
+    val signature = baseMethod.getSignature(PsiSubstitutor.EMPTY).toString()
+    val key = "${implClass.qualifiedName}#$baseOwner#$signature"
 
     val lookupResult =
         implementationMethodCache.computeIfAbsent(key) {
           implClass
-              .findMethodsByName(interfaceMethod.name, false)
-              .firstOrNull { method -> methodSignaturesMatch(method, interfaceMethod) }
+              .findMethodsByName(baseMethod.name, false)
+              .firstOrNull { method -> methodSignaturesMatch(method, baseMethod) }
               ?.let { MethodLookupResult.Found(it) } ?: MethodLookupResult.Missing
         }
 
@@ -106,21 +114,21 @@ class InterfaceResolver(
 
   private fun methodSignaturesMatch(
       implMethod: PsiMethod,
-      interfaceMethod: PsiMethod,
+      baseMethod: PsiMethod,
   ): Boolean {
-    if (implMethod.parameterList.parametersCount != interfaceMethod.parameterList.parametersCount) {
+    if (implMethod.parameterList.parametersCount != baseMethod.parameterList.parametersCount) {
       return false
     }
-    if (implMethod.isEquivalentTo(interfaceMethod)) return true
+    if (implMethod.isEquivalentTo(baseMethod)) return true
     return implMethod.findSuperMethods(true).any { superMethod ->
-      superMethod.isEquivalentTo(interfaceMethod)
+      superMethod.isEquivalentTo(baseMethod)
     }
   }
 
   private fun ensureCacheFresh() {
     val currentCount = PsiModificationTracker.getInstance(project).modificationCount
     if (currentCount != lastModificationCount) {
-      implementingClassesCache.clear()
+      inheritingClassesCache.clear()
       implementationMethodCache.clear()
       lastModificationCount = currentCount
     }

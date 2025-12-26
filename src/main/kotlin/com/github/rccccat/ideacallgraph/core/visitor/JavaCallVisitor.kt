@@ -1,15 +1,33 @@
 package com.github.rccccat.ideacallgraph.core.visitor
 
 import com.intellij.openapi.progress.ProgressManager
-import com.intellij.psi.*
+import com.intellij.psi.JavaRecursiveElementVisitor
+import com.intellij.psi.PsiArrayType
+import com.intellij.psi.PsiAssignmentExpression
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiEllipsisType
+import com.intellij.psi.PsiExpression
+import com.intellij.psi.PsiField
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiMethodCallExpression
+import com.intellij.psi.PsiNewExpression
+import com.intellij.psi.PsiParameter
+import com.intellij.psi.PsiParenthesizedExpression
+import com.intellij.psi.PsiPrimitiveType
+import com.intellij.psi.PsiReferenceExpression
+import com.intellij.psi.PsiType
+import com.intellij.psi.PsiTypeCastExpression
+import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.TypeConversionUtil
 
 /** Visitor for finding call targets in Java code. */
-class JavaCallVisitor : CallVisitor {
-  override fun canVisit(element: PsiElement): Boolean = element is PsiMethod
+class JavaCallVisitor {
+  fun canVisit(element: PsiElement): Boolean = element is PsiMethod
 
-  override fun findCallTargets(
+  fun findCallTargets(
       element: PsiElement,
       context: VisitorContext,
   ): List<CallTargetInfo> {
@@ -23,21 +41,24 @@ class JavaCallVisitor : CallVisitor {
             super.visitMethodCallExpression(expression)
 
             val injectionPoint = findInjectionPoint(expression, context)
-            val arguments = expression.argumentList.expressions.toList()
-            val resolvedMethod = expression.resolveMethod()
-            val targetMethod =
-                if (resolvedMethod != null &&
-                    (isReflectionMethod(resolvedMethod) ||
-                        matchesParameterTypes(resolvedMethod, arguments))) {
-                  resolvedMethod
+            val resolveResult = expression.resolveMethodGenerics()
+            val resolvedMethod =
+                if (resolveResult.isValidResult) {
+                  resolveResult.element as? PsiMethod
                 } else {
-                  resolveJavaCallTarget(expression, injectionPoint, context)
+                  null
                 }
+            val fallbackResolvedMethod =
+                if (resolvedMethod == null) expression.resolveMethod() else null
+            val targetMethod =
+                resolvedMethod
+                    ?: fallbackResolvedMethod?.takeIf { isReflectionMethod(it) }
+                    ?: resolveJavaCallTarget(expression, injectionPoint, context)
 
             if (targetMethod != null) {
               val implementations =
-                  resolveInterfaceImplementationsIfNeeded(targetMethod, injectionPoint, context)
-              callTargets.add(CallTargetInfo(targetMethod, implementations))
+                  resolveOverrideImplementationsIfNeeded(targetMethod, injectionPoint, context)
+              callTargets.add(CallTargetInfo(targetMethod, implementations, expression))
             }
           }
 
@@ -47,7 +68,7 @@ class JavaCallVisitor : CallVisitor {
 
             val resolvedConstructor = expression.resolveConstructor()
             if (resolvedConstructor != null) {
-              callTargets.add(CallTargetInfo(resolvedConstructor))
+              callTargets.add(CallTargetInfo(resolvedConstructor, callExpression = expression))
             }
           }
         },
@@ -262,26 +283,44 @@ class JavaCallVisitor : CallVisitor {
     if (!method.isVarArgs) {
       if (parameters.size != arguments.size) return false
       return parameters.indices.all { index ->
-        val argumentType = arguments[index].type ?: return@all false
-        TypeConversionUtil.isAssignable(parameters[index].type, argumentType)
+        isAssignable(parameters[index].type, arguments[index])
       }
     }
 
     if (arguments.size < parameters.size - 1) return false
-    for (index in 0 until parameters.size) {
-      val parameter = parameters[index]
-      if (index == parameters.size - 1) {
-        val varArgType = (parameter.type as? PsiEllipsisType)?.componentType ?: parameter.type
-        for (argIndex in index until arguments.size) {
-          val argumentType = arguments[argIndex].type ?: return false
-          if (!TypeConversionUtil.isAssignable(varArgType, argumentType)) return false
-        }
-      } else {
-        val argumentType = arguments[index].type ?: return false
-        if (!TypeConversionUtil.isAssignable(parameter.type, argumentType)) return false
-      }
+
+    val fixedCount = parameters.size - 1
+    for (index in 0 until fixedCount) {
+      if (!isAssignable(parameters[index].type, arguments[index])) return false
+    }
+
+    val varargParameter = parameters.last()
+    val varargType = varargParameter.type
+    if (arguments.size == parameters.size) {
+      val lastArgumentType = arguments.last().type
+      if (lastArgumentType == null) return true
+      if (TypeConversionUtil.isAssignable(varargType, lastArgumentType)) return true
+    }
+
+    val componentType =
+        (varargType as? PsiEllipsisType)?.componentType
+            ?: (varargType as? PsiArrayType)?.componentType
+            ?: varargType
+    for (argIndex in fixedCount until arguments.size) {
+      if (!isAssignable(componentType, arguments[argIndex])) return false
     }
     return true
+  }
+
+  private fun isAssignable(
+      parameterType: PsiType,
+      argument: PsiExpression,
+  ): Boolean {
+    val argumentType = argument.type ?: return true
+    if (argumentType == PsiType.NULL) {
+      return parameterType !is PsiPrimitiveType
+    }
+    return TypeConversionUtil.isAssignable(parameterType, argumentType)
   }
 
   private fun isReflectionMethod(method: PsiMethod): Boolean {
@@ -289,14 +328,14 @@ class JavaCallVisitor : CallVisitor {
     return qualifiedName == "java.lang.Class" || qualifiedName == "java.lang.reflect.Method"
   }
 
-  private fun resolveInterfaceImplementationsIfNeeded(
+  private fun resolveOverrideImplementationsIfNeeded(
       method: PsiMethod,
       injectionPoint: PsiElement?,
       context: VisitorContext,
   ): List<ImplementationInfo>? {
     if (!context.settings.resolveInterfaceImplementations) return null
-    val containingClass = method.containingClass ?: return null
-    if (!containingClass.isInterface) return null
-    return context.interfaceResolver.resolveInterfaceImplementationsAdvanced(method, injectionPoint)
+    val implementations =
+        context.interfaceResolver.resolveMethodImplementationsAdvanced(method, injectionPoint)
+    return implementations.ifEmpty { null }
   }
 }

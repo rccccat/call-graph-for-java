@@ -47,7 +47,6 @@ data class CallGraphNodeData(
 /** Node type enumeration - represents the type of element in the call graph. */
 enum class NodeType {
   JAVA_METHOD,
-  KOTLIN_FUNCTION,
   SPRING_CONTROLLER_METHOD,
   SPRING_SERVICE_METHOD,
   MYBATIS_MAPPER_METHOD,

@@ -29,6 +29,7 @@ class CallGraphConfigurable(
   private lateinit var resolveInterfaceImplementationsCheckBox: JBCheckBox
   private lateinit var traverseAllImplementationsCheckBox: JBCheckBox
   private lateinit var mybatisScanAllXmlCheckBox: JBCheckBox
+  private lateinit var filterByParameterUsageCheckBox: JBCheckBox
 
   override fun getDisplayName(): String = "Call Graph"
 
@@ -194,6 +195,21 @@ class CallGraphConfigurable(
         )
     mainPanel!!.add(mybatisScanAllXmlCheckBox, constraints)
 
+    // Advanced Filtering Section
+    constraints.gridy++
+    constraints.gridwidth = 2
+    constraints.insets = Insets(20, 0, 10, 0)
+    mainPanel!!.add(JBLabel("<html><b>Advanced filtering (experimental)</b></html>"), constraints)
+
+    constraints.gridy++
+    constraints.insets = Insets(5, 20, 5, 0)
+    filterByParameterUsageCheckBox =
+        JBCheckBox(
+            "Filter calls where parameters are unused (slower, uses data flow analysis)",
+            projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage,
+        )
+    mainPanel!!.add(filterByParameterUsageCheckBox, constraints)
+
     // Help text
     constraints.gridy++
     constraints.gridwidth = 2
@@ -250,7 +266,9 @@ class CallGraphConfigurable(
         traverseAllImplementationsCheckBox.isSelected !=
             (projectState.traverseAllImplementations ?: appSettings.traverseAllImplementations) ||
         mybatisScanAllXmlCheckBox.isSelected !=
-            (projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml)
+            (projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml) ||
+        filterByParameterUsageCheckBox.isSelected !=
+            (projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage)
   }
 
   override fun apply() {
@@ -266,6 +284,7 @@ class CallGraphConfigurable(
       settings.setResolveInterfaceImplementations(null)
       settings.setTraverseAllImplementations(null)
       settings.setMybatisScanAllXml(null)
+      settings.setFilterByParameterUsage(null)
       return
     }
 
@@ -308,6 +327,7 @@ class CallGraphConfigurable(
     settings.setResolveInterfaceImplementations(resolveInterfaceImplementationsCheckBox.isSelected)
     settings.setTraverseAllImplementations(traverseAllImplementationsCheckBox.isSelected)
     settings.setMybatisScanAllXml(mybatisScanAllXmlCheckBox.isSelected)
+    settings.setFilterByParameterUsage(filterByParameterUsageCheckBox.isSelected)
   }
 
   override fun reset() {
@@ -334,6 +354,8 @@ class CallGraphConfigurable(
         projectState.traverseAllImplementations ?: appSettings.traverseAllImplementations
     mybatisScanAllXmlCheckBox.isSelected =
         projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml
+    filterByParameterUsageCheckBox.isSelected =
+        projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage
     updateFieldsEnabled()
   }
 
@@ -346,7 +368,8 @@ class CallGraphConfigurable(
         state.includeHashCodeEquals == null &&
         state.resolveInterfaceImplementations == null &&
         state.traverseAllImplementations == null &&
-        state.mybatisScanAllXml == null
+        state.mybatisScanAllXml == null &&
+        state.filterByParameterUsage == null
   }
 
   private fun updateFieldsEnabled() {
@@ -360,5 +383,6 @@ class CallGraphConfigurable(
     resolveInterfaceImplementationsCheckBox.isEnabled = enabled
     traverseAllImplementationsCheckBox.isEnabled = enabled
     mybatisScanAllXmlCheckBox.isEnabled = enabled
+    filterByParameterUsageCheckBox.isEnabled = enabled
   }
 }

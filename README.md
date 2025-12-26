@@ -1,10 +1,10 @@
 # Call Graph Plugin for IntelliJ IDEA
 
-An IntelliJ IDEA plugin for generating and visualizing call graphs from Java and Kotlin code (K2 mode only). It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
+An IntelliJ IDEA plugin for generating and visualizing call graphs from Java code. It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
 
 ## Features
 
-- **Java + Kotlin (K2 only)**: Build call graphs from `PsiMethod` and `KtNamedFunction`
+- **Java support**: Build call graphs from `PsiMethod`
 - **Interactive call graph tree**: Expandable tree with depth and child limits
 - **Spring-aware analysis**: Controllers/services/endpoints, DI-aware interface resolution, `@Qualifier`/`@Primary`
 - **MyBatis integration**: Detect mapper interfaces from annotations/XML and add SQL statement nodes
@@ -29,8 +29,7 @@ com.github.rccccat.ideacallgraph/
 │   ├── CallGraphBuilder    # Orchestrates graph building
 │   ├── visitor/            # Visitor pattern for code traversal
 │   │   ├── CallVisitor
-│   │   ├── JavaCallVisitor
-│   │   └── KotlinCallVisitor
+│   │   └── JavaCallVisitor
 │   ├── traversal/          # Graph traversal strategies
 │   │   ├── GraphTraverser
 │   │   └── DepthFirstTraverser
@@ -38,7 +37,7 @@ com.github.rccccat.ideacallgraph/
 │       ├── TypeResolver
 │       └── InterfaceResolver
 ├── framework/              # Framework-specific analyzers
-│   ├── spring/             # SpringAnalyzer + Java/Kotlin/SpringInjection analyzers
+│   ├── spring/             # SpringAnalyzer + JavaSpringAnalyzer + SpringInjectionAnalyzer
 │   └── mybatis/            # MyBatisAnalyzer
 ├── export/                 # Export and scanning utilities
 │   ├── JsonExporter
@@ -72,13 +71,13 @@ com.github.rccccat.ideacallgraph/
 
 ### Key Design Patterns
 
-- **Visitor Pattern**: `CallVisitor` interface with Java/Kotlin implementations for extensible traversal
+- **Visitor Pattern**: `CallVisitor` interface with Java implementation for extensible traversal
 - **Strategy Pattern**: `GraphTraverser` for traversal algorithms
 - **Facade Pattern**: `SpringAnalyzer` provides unified access to Spring analysis
 - **Service Layer**: Clean separation between IDE-specific and pure data models
 
 <!-- Plugin description -->
-A call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java and Kotlin (K2 mode) projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
+A call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
 <!-- Plugin description end -->
 
 ## Usage
@@ -86,7 +85,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 ### Basic Call Graph Generation
 
 1. **Generate Call Graph**:
-   - Right-click on any method or function in your Java/Kotlin code
+   - Right-click on any method in your Java code
    - Select "Generate Call Graph" from the context menu
    - Or use the keyboard shortcut `Ctrl+Alt+G`
 
@@ -141,16 +140,15 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 
 ## Requirements
 
-- IntelliJ IDEA 2024.3 or later (K2 mode only, K1 not supported)
-- Kotlin analysis is K2-only (validated against `IDEMyPluginTest.kt`)
-- Java/Kotlin projects
+- IntelliJ IDEA 2024.3 or later
+- Java projects
 - Project indexing must be complete for accurate analysis
 
 ## Supported Frameworks
 
 - **Spring Framework**: Detects controllers, services, REST endpoints, and DI patterns
 - **MyBatis**: Tracks mapper interfaces, annotation SQL, and XML SQL mappings
-- **Standard Java/Kotlin**: All method calls and function invocations
+- **Standard Java**: All method calls and function invocations
 
 ## Development
 

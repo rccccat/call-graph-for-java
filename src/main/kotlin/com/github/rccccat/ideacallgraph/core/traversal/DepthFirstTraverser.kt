@@ -7,9 +7,9 @@ import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.intellij.openapi.progress.ProgressManager
 
 /** Depth-first traversal implementation for call graph building. */
-class DepthFirstTraverser : GraphTraverser {
+class DepthFirstTraverser {
 
-  override fun traverse(
+  fun traverse(
       rootNode: CallGraphNodeData,
       findCallTargets: (nodeId: String) -> List<TraversalTarget>,
       settings: CallGraphProjectSettings,
@@ -64,28 +64,6 @@ class DepthFirstTraverser : GraphTraverser {
           nodes = nodes,
           edges = edges,
       )
-
-      // Handle interface implementations
-      if (settings.resolveInterfaceImplementations && target.implementations != null) {
-        for (impl in target.implementations) {
-          addNodeAndEdge(
-              fromId = target.node.id,
-              target = impl,
-              nodes = nodes,
-              edges = edges,
-          )
-          traverseIfNeeded(
-              targetNode = impl.node,
-              nodes = nodes,
-              edges = edges,
-              visitedDepth = visitedDepth,
-              remainingDepth = remainingDepth,
-              currentIsProjectCode = isProjectCode,
-              findCallTargets = findCallTargets,
-              settings = settings,
-          )
-        }
-      }
 
       // Continue traversal for the target
       traverseIfNeeded(

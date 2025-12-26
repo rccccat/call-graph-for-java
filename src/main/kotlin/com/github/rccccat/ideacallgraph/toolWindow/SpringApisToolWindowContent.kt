@@ -2,9 +2,9 @@ package com.github.rccccat.ideacallgraph.toolWindow
 
 import com.github.rccccat.ideacallgraph.export.SpringApiScanner
 import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
+import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
 import com.github.rccccat.ideacallgraph.ide.psi.PsiNodeFactory
-import com.github.rccccat.ideacallgraph.service.AnalyzerRegistry
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeNavigator
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeText
@@ -52,9 +52,9 @@ class SpringApisToolWindowContent(
   private val emptyLabel = JLabel("Click Refresh to scan Spring API endpoints")
   private val scrollPane = JBScrollPane(list)
   private val service = CallGraphServiceImpl.getInstance(project)
+  private val springAnalyzer = SpringAnalyzer()
   private val myBatisAnalyzer = MyBatisAnalyzer(project)
-  private val nodeFactory =
-      PsiNodeFactory(project, AnalyzerRegistry.getInstance().springAnalyzer, myBatisAnalyzer)
+  private val nodeFactory = PsiNodeFactory(project, springAnalyzer, myBatisAnalyzer)
   private val searchField = SearchTextField()
   private var allNodes: List<IdeCallGraphNode> = emptyList()
 

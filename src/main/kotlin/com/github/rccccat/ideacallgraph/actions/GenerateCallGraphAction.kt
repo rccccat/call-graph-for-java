@@ -20,9 +20,8 @@ import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.KtNamedFunction
 
-/** Action to generate call graph from selected method or function */
+/** Action to generate call graph from selected method */
 class GenerateCallGraphAction : AnAction("Generate Call Graph") {
   override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
@@ -51,8 +50,7 @@ class GenerateCallGraphAction : AnAction("Generate Call Graph") {
         }
 
     if (targetElement == null) {
-      showNotification(
-          project, "Please place cursor on a method or function", NotificationType.WARNING)
+      showNotification(project, "Please place cursor on a method", NotificationType.WARNING)
       return
     }
 
@@ -94,10 +92,7 @@ class GenerateCallGraphAction : AnAction("Generate Call Graph") {
     val psiFile = e.getData(CommonDataKeys.PSI_FILE)
 
     val isAvailable =
-        project != null &&
-            editor != null &&
-            psiFile != null &&
-            (psiFile.name.endsWith(".java") || psiFile.name.endsWith(".kt"))
+        project != null && editor != null && psiFile != null && psiFile.name.endsWith(".java")
 
     e.presentation.isEnabledAndVisible = isAvailable
 
@@ -111,22 +106,12 @@ class GenerateCallGraphAction : AnAction("Generate Call Graph") {
 
   private fun findTargetElement(element: PsiElement): PsiElement? {
     // Look for Java method
-    PsiTreeUtil.getParentOfType(element, PsiMethod::class.java)?.let {
-      return it
-    }
-
-    // Look for Kotlin function
-    PsiTreeUtil.getParentOfType(element, KtNamedFunction::class.java)?.let {
-      return it
-    }
-
-    return null
+    return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java)
   }
 
   private fun getElementName(element: PsiElement): String =
       when (element) {
         is PsiMethod -> element.name
-        is KtNamedFunction -> element.name ?: "anonymous"
         else -> "element"
       }
 

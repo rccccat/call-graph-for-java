@@ -11,8 +11,6 @@ import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.SmartPointerManager
-import org.jetbrains.kotlin.psi.KtClassOrObject
-import org.jetbrains.kotlin.psi.KtNamedFunction
 
 /** Factory for creating IDE nodes and pure node data from PSI elements. */
 class PsiNodeFactory(
@@ -23,26 +21,13 @@ class PsiNodeFactory(
   fun createNodeData(element: PsiElement): CallGraphNodeData? =
       when (element) {
         is PsiMethod -> createFromJavaMethod(element)
-        is KtNamedFunction -> createFromKotlinFunction(element)
         else -> null
       }
 
   fun createIdeNode(element: PsiElement): IdeCallGraphNode? {
-    val sourceElement = resolveSourceElement(element)
-    val nodeData = createNodeData(sourceElement) ?: return null
-    val pointer =
-        SmartPointerManager.getInstance(project).createSmartPsiElementPointer(sourceElement)
+    val nodeData = createNodeData(element) ?: return null
+    val pointer = SmartPointerManager.getInstance(project).createSmartPsiElementPointer(element)
     return IdeCallGraphNode(nodeData, pointer)
-  }
-
-  private fun resolveSourceElement(element: PsiElement): PsiElement {
-    if (element is PsiMethod) {
-      val kotlinOrigin = element.navigationElement as? KtNamedFunction
-      if (kotlinOrigin != null) {
-        return kotlinOrigin
-      }
-    }
-    return element
   }
 
   private fun createFromJavaMethod(method: PsiMethod): CallGraphNodeData {
@@ -83,41 +68,6 @@ class PsiNodeFactory(
     )
   }
 
-  private fun createFromKotlinFunction(function: KtNamedFunction): CallGraphNodeData {
-    val containingClass = function.parent?.parent as? KtClassOrObject
-    val className = containingClass?.name
-    val qualifiedClassName = containingClass?.fqName?.asString()
-
-    val functionName = function.name ?: "anonymous"
-    val signature = buildKotlinSignature(function)
-    val id = buildKotlinNodeId(function, qualifiedClassName, functionName)
-
-    val springInfo = springAnalyzer.analyzeMethod(function)
-
-    val nodeType =
-        when {
-          springInfo.isController -> NodeType.SPRING_CONTROLLER_METHOD
-          springInfo.isService -> NodeType.SPRING_SERVICE_METHOD
-          else -> NodeType.KOTLIN_FUNCTION
-        }
-
-    val file = function.containingFile?.virtualFile
-    val offset = function.textRange?.startOffset ?: -1
-    val lineNumber = file?.let { calculateLineNumber(function, offset) } ?: -1
-
-    return CallGraphNodeData(
-        id = id,
-        name = functionName,
-        className = className,
-        signature = signature,
-        nodeType = nodeType,
-        isProjectCode = isProjectCode(project, function),
-        isSpringEndpoint = springInfo.isEndpoint,
-        offset = offset,
-        lineNumber = lineNumber,
-    )
-  }
-
   private fun buildJavaSignature(method: PsiMethod): String {
     val returnType = method.returnType?.presentableText ?: "void"
     val parameters =
@@ -125,18 +75,6 @@ class PsiNodeFactory(
           "${param.type.presentableText} ${param.name}"
         }
     return "$returnType ${method.name}($parameters)"
-  }
-
-  private fun buildKotlinSignature(function: KtNamedFunction): String {
-    val functionName = function.name ?: "anonymous"
-    val parameters =
-        function.valueParameters.joinToString(", ") { param ->
-          val paramName = param.name ?: ""
-          val paramType = param.typeReference?.text ?: ""
-          "$paramName: $paramType"
-        }
-    val returnType = function.typeReference?.text ?: "Unit"
-    return "fun $functionName($parameters): $returnType"
   }
 
   private fun buildJavaNodeId(
@@ -147,19 +85,6 @@ class PsiNodeFactory(
     val container = qualifiedClassName ?: buildFileContainer(method)
     val anchor = buildFileAnchor(method)
     return "$container#${method.name}($paramTypes)@$anchor"
-  }
-
-  private fun buildKotlinNodeId(
-      function: KtNamedFunction,
-      qualifiedClassName: String?,
-      functionName: String,
-  ): String {
-    val paramTypes =
-        function.valueParameters.joinToString(",") { param -> param.typeReference?.text ?: "Any" }
-    val receiverType = function.receiverTypeReference?.text?.let { "receiver=$it;" } ?: ""
-    val container = qualifiedClassName ?: buildFileContainer(function)
-    val anchor = buildFileAnchor(function)
-    return "$container#$functionName($receiverType$paramTypes)@$anchor"
   }
 
   private fun buildFileContainer(element: PsiElement): String {

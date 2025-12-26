@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an IntelliJ IDEA plugin that generates and visualizes method call graphs for Java and Kotlin code (K2 mode only). It supports Spring Framework and MyBatis integration.
+This is an IntelliJ IDEA plugin that generates and visualizes method call graphs for Java code. It supports Spring Framework and MyBatis integration.
 
 ## Architecture
 
@@ -45,12 +45,12 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 
 **Core Layer** (`core/`):
 - `CallGraphBuilder` - Orchestrates graph building
-- `visitor/CallVisitor` + `JavaCallVisitor`/`KotlinCallVisitor` - PSI traversal
+- `visitor/CallVisitor` + `JavaCallVisitor` - PSI traversal
 - `traversal/GraphTraverser` + `DepthFirstTraverser` - Traversal strategy
 - `resolver/TypeResolver` + `InterfaceResolver` - Type resolution and interface dispatch
 
 **Framework Layer** (`framework/`):
-- `spring/SpringAnalyzer` - Unified Spring analysis facade (with `JavaSpringAnalyzer`, `KotlinSpringAnalyzer`, `SpringInjectionAnalyzer`)
+- `spring/SpringAnalyzer` - Unified Spring analysis facade (with `JavaSpringAnalyzer`, `SpringInjectionAnalyzer`)
 - `mybatis/MyBatisAnalyzer` - Mapper/XML SQL resolution
 
 **IDE Layer** (`ide/`):
@@ -73,13 +73,12 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 
 - Plugin ID: `com.github.rccccat.ideacallgraph`
 - Entry points defined in `src/main/resources/META-INF/plugin.xml`
-- Depends on `com.intellij.java`, `org.jetbrains.kotlin`, and `com.intellij.modules.kotlin.k2`
+- Depends on `com.intellij.java`
 
 ## Technical Notes
 
 - Target IntelliJ Platform: 2024.3+ (build 243+)
 - JVM toolchain: Java 21
-- Kotlin analysis requires K2 mode only (K1 not supported)
 - Uses SmartPsiElementPointer to safely reference PSI elements across EDT operations
 - ReadAction.compute() is used for PSI access from background threads
 - Depth limits: separate settings for project code vs third-party libraries

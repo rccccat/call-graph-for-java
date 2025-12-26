@@ -1,115 +1,138 @@
 # Call Graph Plugin for IntelliJ IDEA
 
-A powerful IntelliJ IDEA plugin for generating and visualizing call graphs from Java and Kotlin code. This plugin helps developers understand code dependencies, analyze method invocation chains, and navigate complex codebases more efficiently.
+An IntelliJ IDEA plugin for generating and visualizing call graphs from Java and Kotlin code (K2 mode only). It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
 
 ## Features
 
-- **Multi-language support**: Works with both Java and Kotlin code
-- **Interactive call graph visualization**: Tree-based display of method call hierarchies
-- **Spring Framework integration**: Special handling for Spring endpoints and services
-- **MyBatis integration**: Track calls from mapper interfaces to XML SQL statements
-- **AI-powered analysis**: Leverage LLM to analyze call graphs and provide architectural insights
-- **Code navigation**: Double-click to navigate to method definitions or XML files
-- **JSON export**: Export call graphs to JSON format for external analysis
-- **Configurable analysis**: Customize depth limits, filtering options, and analysis scope
-- **Context menus**: Right-click actions for copying signatures and viewing method details
-- **Real-time analysis**: Background processing with progress indicators
+- **Java + Kotlin (K2 only)**: Build call graphs from `PsiMethod` and `KtNamedFunction`
+- **Interactive call graph tree**: Expandable tree with depth and child limits
+- **Spring-aware analysis**: Controllers/services/endpoints, DI-aware interface resolution, `@Qualifier`/`@Primary`
+- **MyBatis integration**: Detect mapper interfaces from annotations/XML and add SQL statement nodes
+- **Spring APIs browser**: List endpoints with search and export filtered call graphs to JSONL
+- **MyBatis mappings browser**: Browse SQL mappings and jump to mapper/XML
+- **JSON export with code**: Pretty/compact JSON including each node's self code
+- **Navigation and context actions**: Double-click navigation, copy signatures, view method details
+- **Configurable analysis**: Depth limits, package filters, method filters, interface resolution, MyBatis XML scan
+- **Background tasks**: Progress indicators and indexing checks
 
 ## Architecture
 
-The plugin is structured into several key components:
+The plugin follows a layered architecture separating PSI analysis, framework integrations, and UI:
 
-### Core Analysis Engine
-- **`CallGraphAnalyzer`**: Main analyzer for building call graphs from PSI elements
-- **`CallGraphNodeFactory`**: Factory for creating call graph nodes from PSI elements
-- **`SpringCallGraphAnalyzer`**: Specialized analyzer for Spring Framework patterns
-- **`MyBatisCallGraphAnalyzer`**: Analyzer for MyBatis mapper interfaces and XML mappings
+```
+com.github.rccccat.ideacallgraph/
+├── actions/                # Editor actions (Generate Call Graph)
+├── api/                    # Public interfaces and pure data models
+│   ├── CallGraphService
+│   └── model/              # CallGraphData/CallGraphNodeData/CallType (no PSI dependencies)
+├── core/                   # Core analysis engine
+│   ├── CallGraphBuilder    # Orchestrates graph building
+│   ├── visitor/            # Visitor pattern for code traversal
+│   │   ├── CallVisitor
+│   │   ├── JavaCallVisitor
+│   │   └── KotlinCallVisitor
+│   ├── traversal/          # Graph traversal strategies
+│   │   ├── GraphTraverser
+│   │   └── DepthFirstTraverser
+│   └── resolver/           # Type and interface resolution
+│       ├── TypeResolver
+│       └── InterfaceResolver
+├── framework/              # Framework-specific analyzers
+│   ├── spring/             # SpringAnalyzer + Java/Kotlin/SpringInjection analyzers
+│   └── mybatis/            # MyBatisAnalyzer
+├── export/                 # Export and scanning utilities
+│   ├── JsonExporter
+│   ├── CodeExtractor
+│   ├── SpringApiScanner
+│   └── MyBatisMapperScanner
+├── ide/                    # IDE integration layer
+│   ├── model/              # IdeCallGraphNode, IdeCallGraph (with PSI pointers)
+│   └── psi/                # PsiNodeFactory
+├── service/                # Service layer
+│   ├── CallGraphServiceImpl
+│   └── AnalyzerRegistry
+├── settings/               # Configuration and UI
+│   ├── CallGraphConfigurable
+│   ├── CallGraphProjectSettings
+│   └── CallGraphAppSettings
+├── toolWindow/             # Tool window UI
+│   ├── MyToolWindowFactory
+│   ├── CallGraphToolWindowContent
+│   ├── SpringApisToolWindowContent
+│   └── MyBatisMappingsToolWindowContent
+├── ui/                     # UI components
+│   ├── CallGraphTreeRenderer
+│   ├── CallGraphNodeNavigator
+│   ├── CallGraphNodeText
+│   ├── JsonPreviewDialog
+│   └── toolwindow/
+│       └── TreeConfiguration
+└── util/                   # Annotation helpers and PSI utilities
+```
 
-### Data Models
-- **`CallGraph`**: Represents the complete call graph structure
-- **`CallGraphNode`**: Individual nodes in the call graph
-- **`CallGraphEdge`**: Connections between nodes with call type information
+### Key Design Patterns
 
-### User Interface
-- **`CallGraphToolWindowContent`**: Main tool window for displaying call graphs
-- **`CallGraphTreeRenderer`**: Custom tree renderer for call graph visualization
-- **`JsonPreviewDialog`**: Dialog for viewing exported JSON data
-- **`LLMAnalysisDialog`**: Dialog for displaying AI analysis results
-
-### Actions and Settings
-- **`GenerateCallGraphAction`**: Action triggered from editor context menu
-- **`CallGraphSettings`**: Configuration management for analysis parameters
-- **`CallGraphConfigurable`**: Settings UI in IDE preferences
-- **`LLMSettings`**: Configuration for AI analysis features
-- **`LLMConfigurable`**: Settings UI for LLM integration
-
-### AI Integration
-- **`LLMService`**: Service for interacting with Large Language Models
-- **`LLMAnalysisDialog`**: Interface for displaying AI-generated insights
+- **Visitor Pattern**: `CallVisitor` interface with Java/Kotlin implementations for extensible traversal
+- **Strategy Pattern**: `GraphTraverser` for traversal algorithms
+- **Facade Pattern**: `SpringAnalyzer` provides unified access to Spring analysis
+- **Service Layer**: Clean separation between IDE-specific and pure data models
 
 <!-- Plugin description -->
-A comprehensive call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java and Kotlin projects. Features include multi-language support, Spring Framework integration, MyBatis mapper tracking, AI-powered code analysis, configurable analysis depth, JSON export capabilities, and intuitive code navigation through double-click interactions.
-
-This plugin helps developers understand complex codebases by visualizing method dependencies and call chains, making it easier to analyze code flow, identify potential issues, and navigate large projects efficiently. With built-in AI analysis, get architectural insights and optimization recommendations automatically.
+A call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java and Kotlin (K2 mode) projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
 <!-- Plugin description end -->
 
 ## Usage
 
 ### Basic Call Graph Generation
 
-1. **Generate Call Graph**: 
+1. **Generate Call Graph**:
    - Right-click on any method or function in your Java/Kotlin code
    - Select "Generate Call Graph" from the context menu
    - Or use the keyboard shortcut `Ctrl+Alt+G`
 
-2. **View Results**: 
+2. **View Results**:
    - The call graph will appear in the "Call Graph" tool window
    - Navigate through the tree structure to explore method dependencies
    - Double-click on any node to jump to the corresponding code
+   - Right-click nodes to copy signatures or view method details
 
-3. **Export Data**: 
-   - Use the "View JSON" button in the tool window to export the call graph
-   - The JSON format allows for integration with external analysis tools
+3. **Export Data**:
+   - Use "View JSON" in the tool window to preview the call graph as JSON
+   - Exported JSON includes the node's self code for offline analysis
 
-### AI-Powered Analysis
+### Spring API Browser
 
-4. **Configure AI Analysis** (First time setup):
-   - Go to `Settings/Preferences > Tools > Call Graph LLM`
-   - Enter your API endpoint URL and API key
-   - Customize the system prompt for analysis focus
-   - Enable the feature and test connection
+1. **Browse APIs**:
+   - Open the "Spring APIs" tab in the tool window
+   - Click "Refresh" to scan all Spring endpoints in your project
+   - Use the search field to filter by class, method, or signature text
 
-5. **Get AI Insights**:
-   - After generating a call graph, click the "AI Analysis" button
-   - Wait for the analysis to complete (progress bar will show)
-   - Review architectural insights, potential issues, and optimization suggestions
+2. **Export APIs**:
+   - Click "Export" to export filtered endpoints as JSONL
+   - Each line contains one endpoint's call graph
 
-### MyBatis Integration
+### MyBatis Mappings Browser
 
-6. **MyBatis Mapper Tracking**:
-   - Call graphs automatically detect MyBatis mapper interfaces
-   - Shows both annotation-based (@Select, @Insert, etc.) and XML-based SQL mappings
-   - Double-click SQL nodes to navigate directly to XML mapper files
+1. **Browse Mappings**:
+   - Open the "MyBatis Mappings" tab in the tool window
+   - Click "Refresh" to scan all mapper methods
+   - Double-click to navigate to mapper interface or XML SQL
 
 ### Configuration
 
-7. **Customize Analysis**:
+1. **Customize Analysis**:
    - Go to `Settings/Preferences > Tools > Call Graph`
-   - Adjust analysis depth, filtering options, and other parameters
+   - Configure project/third-party depth limits
+   - Set package exclude patterns (regex) and method filters
+   - Control interface implementation resolution and traversal breadth
+   - Enable full XML scanning for MyBatis (slower but more complete)
 
 ## Installation
 
 - Using the IDE built-in plugin system:
-  
+
   <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "Call Graph Plugin"</kbd> >
   <kbd>Install</kbd>
-  
-- Using JetBrains Marketplace:
-
-  Go to [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID) and install it by clicking the <kbd>Install to ...</kbd> button in case your IDE is running.
-
-  You can also download the [latest release](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID/versions) from JetBrains Marketplace and install it manually using
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
 - Manually:
 
@@ -118,64 +141,53 @@ This plugin helps developers understand complex codebases by visualizing method 
 
 ## Requirements
 
-- IntelliJ IDEA 2024.3 or later
+- IntelliJ IDEA 2024.3 or later (K2 mode only, K1 not supported)
+- Kotlin analysis is K2-only (validated against `IDEMyPluginTest.kt`)
 - Java/Kotlin projects
 - Project indexing must be complete for accurate analysis
-- For AI analysis: API access to OpenAI-compatible LLM service
 
 ## Supported Frameworks
 
-- **Spring Framework**: Detects controllers, services, and REST endpoints
-- **MyBatis**: Tracks mapper interfaces and XML SQL mappings
+- **Spring Framework**: Detects controllers, services, REST endpoints, and DI patterns
+- **MyBatis**: Tracks mapper interfaces, annotation SQL, and XML SQL mappings
 - **Standard Java/Kotlin**: All method calls and function invocations
-
-## AI Analysis Features
-
-The plugin includes built-in AI analysis capabilities that can:
-
-- **Architecture Overview**: Identify design patterns and architectural styles
-- **Component Analysis**: Understand the role of different system components
-- **Issue Detection**: Find potential problems like circular dependencies and tight coupling
-- **Optimization Suggestions**: Recommend performance and maintainability improvements
-- **Security Analysis**: Identify potential security concerns in call flows
-
-### Supported LLM Providers
-
-- OpenAI (GPT-4, GPT-3.5-turbo)
-- Azure OpenAI
-- Any OpenAI-compatible API endpoint
-- Local LLM services (Ollama, etc.)
 
 ## Development
 
-This plugin is built using:
-- Kotlin for the implementation language
-- IntelliJ Platform SDK 2024.3
-- Gradle with Kotlin DSL for build management
+### Build Commands
+
+```bash
+# Build the plugin
+./gradlew build
+
+# Run the plugin in a development IDE instance
+./gradlew runIde
+
+# Run tests
+./gradlew test
+
+# Build plugin distribution (creates zip in build/distributions)
+./gradlew buildPlugin
+
+# Format code
+./gradlew ktfmtFormat
+```
+
+### Tech Stack
+
+- Kotlin for implementation
+- IntelliJ Platform SDK 2024.3+
+- Gradle with Kotlin DSL
 - Gson for JSON serialization
-- Java HTTP Client for LLM API communication
-
-### Project Structure
-
-```
-src/main/kotlin/com/github/rccccat/ideacallgraph/
-├── actions/              # IDE actions (Generate Call Graph)
-├── analysis/             # Core analysis engine
-├── export/               # JSON export functionality
-├── llm/                  # AI analysis integration
-├── model/                # Data models (CallGraph, CallGraphNode, etc.)
-├── settings/             # Plugin configuration
-├── toolWindow/           # UI components
-└── ui/                   # Additional UI elements
-```
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+4. Run `./gradlew ktfmtFormat` to format code
+5. Add tests if applicable
+6. Submit a pull request
 
 ## License
 

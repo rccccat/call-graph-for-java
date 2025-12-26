@@ -1,0 +1,177 @@
+package com.github.rccccat.ideacallgraph.framework.spring
+
+import com.github.rccccat.ideacallgraph.util.SpringAnnotations
+import com.github.rccccat.ideacallgraph.util.extractFirstStringValue
+import com.github.rccccat.ideacallgraph.util.hasAnyAnnotation
+import com.intellij.psi.*
+
+/** Analyzer for Spring dependency injection patterns. */
+class SpringInjectionAnalyzer {
+  /** Checks if an element has Spring injection annotations. */
+  fun hasInjectionAnnotation(element: PsiModifierListOwner): Boolean =
+      hasAnyAnnotation(element, SpringAnnotations.injectionAnnotations)
+
+  /** Analyzes Spring injection for the given injection point and implementations. */
+  fun analyze(
+      injectionPoint: PsiElement,
+      implementations: List<PsiClass>,
+  ): SpringInjectionResult {
+    // Extract qualifier from injection point
+    val qualifierValue = extractQualifier(injectionPoint)
+
+    // Check for collection injection
+    val injectionType = determineInjectionType(injectionPoint)
+    if (injectionType.isCollection) {
+      return SpringInjectionResult(
+          selectedImplementations = implementations,
+          injectionType = injectionType,
+          reason = "Collection injection - all implementations included",
+      )
+    }
+
+    // Filter implementations based on qualifier and primary
+    val filteredImplementations = filterImplementationsByPriority(implementations, qualifierValue)
+
+    return SpringInjectionResult(
+        selectedImplementations = filteredImplementations,
+        injectionType = injectionType,
+        reason = buildResolutionReason(filteredImplementations, qualifierValue),
+    )
+  }
+
+  private fun extractQualifier(element: PsiElement): String? =
+      when (element) {
+        is PsiField -> extractQualifierFromAnnotations(element.modifierList)
+        is PsiParameter -> extractQualifierFromAnnotations(element.modifierList)
+        is PsiMethod -> extractQualifierFromAnnotations(element.modifierList)
+        else -> null
+      }
+
+  private fun extractQualifierFromAnnotations(modifierList: PsiModifierList?): String? {
+    if (modifierList == null) return null
+
+    val qualifierAnnotation =
+        modifierList.annotations.find {
+          hasAnyAnnotation(it, SpringAnnotations.qualifierAnnotations)
+        }
+
+    if (qualifierAnnotation != null) {
+      return qualifierAnnotation.findAttributeValue("value")?.let { extractFirstStringValue(it) }
+    }
+
+    val resourceAnnotation =
+        modifierList.annotations.find {
+          hasAnyAnnotation(it, SpringAnnotations.resourceAnnotations)
+        }
+
+    if (resourceAnnotation != null) {
+      return resourceAnnotation.findAttributeValue("name")?.let { extractFirstStringValue(it) }
+          ?: resourceAnnotation.findAttributeValue("value")?.let { extractFirstStringValue(it) }
+    }
+
+    return null
+  }
+
+  private fun determineInjectionType(element: PsiElement): InjectionType {
+    val type =
+        when (element) {
+          is PsiField -> element.type
+          is PsiParameter -> element.type
+          else -> return InjectionType.SINGLE
+        }
+
+    val typeText = type.canonicalText
+
+    return when {
+      typeText.startsWith("java.util.List<") ||
+          typeText.startsWith("kotlin.collections.List<") ||
+          typeText.startsWith("List<") -> InjectionType.LIST
+
+      typeText.startsWith("java.util.Map<java.lang.String,") ||
+          typeText.startsWith("kotlin.collections.Map<kotlin.String,") ||
+          typeText.startsWith("Map<") -> InjectionType.MAP
+
+      typeText.startsWith("java.util.Set<") ||
+          typeText.startsWith("kotlin.collections.Set<") ||
+          typeText.startsWith("Set<") -> InjectionType.SET
+
+      else -> InjectionType.SINGLE
+    }
+  }
+
+  private fun filterImplementationsByPriority(
+      implementations: List<PsiClass>,
+      qualifierValue: String?,
+  ): List<PsiClass> {
+    // If qualifier is specified, find matching implementation
+    if (qualifierValue != null) {
+      val qualifierMatches =
+          implementations.filter { impl -> matchesQualifier(impl, qualifierValue) }
+      if (qualifierMatches.isNotEmpty()) {
+        return qualifierMatches
+      }
+    }
+
+    // Find @Primary implementations
+    val primaryImplementations =
+        implementations.filter { impl ->
+          hasAnyAnnotation(impl, SpringAnnotations.primaryAnnotations)
+        }
+
+    if (primaryImplementations.isNotEmpty()) {
+      return primaryImplementations
+    }
+
+    // Return all if no specific priority found
+    return implementations
+  }
+
+  private fun matchesQualifier(
+      implementation: PsiClass,
+      qualifierValue: String,
+  ): Boolean {
+    // Check if the implementation has a matching @Qualifier
+    val implQualifier =
+        implementation.modifierList
+            ?.annotations
+            ?.find { hasAnyAnnotation(it, SpringAnnotations.qualifierAnnotations) }
+            ?.findAttributeValue("value")
+            ?.let { extractFirstStringValue(it) }
+
+    if (implQualifier == qualifierValue) {
+      return true
+    }
+
+    // Check if the bean name matches (simple class name in camelCase)
+    val beanName =
+        implementation.name?.let { name -> name.substring(0, 1).lowercase() + name.substring(1) }
+
+    return beanName == qualifierValue
+  }
+
+  private fun buildResolutionReason(
+      implementations: List<PsiClass>,
+      qualifierValue: String?,
+  ): String =
+      when {
+        implementations.isEmpty() -> {
+          "No matching implementations found"
+        }
+
+        qualifierValue != null -> {
+          "Resolved by @Qualifier(\"$qualifierValue\")"
+        }
+
+        implementations.any { hasAnyAnnotation(it, SpringAnnotations.primaryAnnotations) } -> {
+          "Resolved by @Primary annotation"
+        }
+
+        implementations.size == 1 -> {
+          "Single implementation available"
+        }
+
+        else -> {
+          "Multiple implementations - using all (ambiguous injection)"
+        }
+      }
+}

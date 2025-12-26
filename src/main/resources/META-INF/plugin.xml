@@ -2,30 +2,39 @@
 <idea-plugin>
     <id>com.github.rccccat.ideacallgraph</id>
     <name>idea-call-graph</name>
-    <vendor>rccccat</vendor>
+    <vendor>Idea Call Graph</vendor>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
     <depends>org.jetbrains.kotlin</depends>
-
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <depends>com.intellij.modules.kotlin.k2</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.rccccat.ideacallgraph.toolWindow.MyToolWindowFactory" id="Call Graph"/>
-        <applicationConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings" 
-                                instance="com.github.rccccat.ideacallgraph.settings.CallGraphConfigurable"/>
-        <applicationConfigurable groupId="tools" displayName="Call Graph LLM" id="callgraph.llm.settings" 
-                                instance="com.github.rccccat.ideacallgraph.llm.LLMConfigurable"/>
+        <projectConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings"
+                             instance="com.github.rccccat.ideacallgraph.settings.CallGraphConfigurable"/>
         <notificationGroup id="Call Graph" displayType="BALLOON" isLogByDefault="false"/>
+
+        <!-- Application-level services -->
+        <applicationService serviceImplementation="com.github.rccccat.ideacallgraph.service.AnalyzerRegistry"/>
+        <applicationService serviceImplementation="com.github.rccccat.ideacallgraph.settings.CallGraphAppSettings"/>
+
+        <!-- Project-level services -->
+        <projectService serviceImplementation="com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl"/>
+        <projectService serviceImplementation="com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings"/>
+    </extensions>
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <supportsKotlinPluginMode supportsK1="false" supportsK2="true"/>
     </extensions>
 
     <actions>
-        <action id="GenerateCallGraph" 
-                class="com.github.rccccat.ideacallgraph.actions.GenerateCallGraphAction" 
-                text="Generate Call Graph" 
+        <action id="GenerateCallGraph"
+                class="com.github.rccccat.ideacallgraph.actions.GenerateCallGraphAction"
+                text="Generate Call Graph"
                 description="Generate call graph for the selected method or function">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt G"/>
         </action>
+
     </actions>
 </idea-plugin>

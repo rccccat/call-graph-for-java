@@ -1,4 +1,5 @@
 #!/bin/sh
+#noinspection SpellCheckingInspection
 
 #
 # Copyright © 2015 the original authors.

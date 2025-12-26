@@ -5,14 +5,24 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.content.ContentFactory
 
-
 class MyToolWindowFactory : ToolWindowFactory {
+  override fun createToolWindowContent(
+      project: Project,
+      toolWindow: ToolWindow,
+  ) {
+    val callGraphContent = CallGraphToolWindowContent(project)
+    val contentFactory = ContentFactory.getInstance()
+    val callGraphTab = contentFactory.createContent(callGraphContent, "Call Graph", false)
+    toolWindow.contentManager.addContent(callGraphTab)
 
-    override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val callGraphContent = CallGraphToolWindowContent(project)
-        val content = ContentFactory.getInstance().createContent(callGraphContent, "Call Graph", false)
-        toolWindow.contentManager.addContent(content)
-    }
+    val springTab =
+        contentFactory.createContent(SpringApisToolWindowContent(project), "Spring APIs", false)
+    toolWindow.contentManager.addContent(springTab)
 
-    override fun shouldBeAvailable(project: Project) = true
+    val mybatisTab =
+        contentFactory.createContent(MyBatisMappingsToolWindowContent(project), "MyBatis", false)
+    toolWindow.contentManager.addContent(mybatisTab)
+  }
+
+  override fun shouldBeAvailable(project: Project) = true
 }

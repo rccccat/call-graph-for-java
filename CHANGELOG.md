@@ -61,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance**: Background processing with progress indication
 
 ### Initial Architecture
-- Core analysis engine with CallGraphAnalyzer
+- Core analysis engine with CallGraphBuilder
 - PSI element processing and smart pointer management
 - Spring-specific pattern recognition
 - Tool window integration with IntelliJ Platform

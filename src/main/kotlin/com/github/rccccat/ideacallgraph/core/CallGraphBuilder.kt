@@ -24,6 +24,7 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.SmartPsiElementPointer
+import com.intellij.psi.util.PropertyUtilBase
 
 /** Coordinator for building call graphs. Orchestrates visitors, resolvers, and traversers. */
 class CallGraphBuilder(
@@ -218,9 +219,8 @@ class CallGraphBuilder(
 
         // Check method filtering
         if (!settings.includeGettersSetters) {
-          if (methodName.startsWith("get") ||
-              methodName.startsWith("set") ||
-              methodName.startsWith("is")) {
+          if (PropertyUtilBase.isSimplePropertyGetter(element) ||
+              PropertyUtilBase.isSimplePropertySetter(element)) {
             return true
           }
         }

@@ -4,14 +4,15 @@ import com.github.rccccat.ideacallgraph.api.model.CallGraphNodeData
 import com.github.rccccat.ideacallgraph.api.model.NodeType
 import com.github.rccccat.ideacallgraph.api.model.SqlType
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
-import com.github.rccccat.ideacallgraph.util.MyBatisAnnotations
 import com.github.rccccat.ideacallgraph.util.extractStringValues
-import com.github.rccccat.ideacallgraph.util.hasAnyAnnotation
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.BulkFileListener
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.psi.PsiAnnotation
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
@@ -21,41 +22,61 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.xml.XmlFile
-import com.intellij.psi.xml.XmlTag
 import java.util.concurrent.ConcurrentHashMap
 
 /** Analyzer for MyBatis mapper methods and SQL mappings. */
 class MyBatisAnalyzer(
     private val project: Project,
 ) {
+  private val log = Logger.getInstance(MyBatisAnalyzer::class.java)
+  // Method analysis cache (cleared on any PSI change for annotation-based SQL)
   private val mapperMethodCache = ConcurrentHashMap<String, MyBatisMethodInfo>()
-  private val mapperXmlFileCache = ConcurrentHashMap<String, VirtualFile>()
-  private val missingXmlFileCache = ConcurrentHashMap.newKeySet<String>()
-  private val cacheLock = Any()
   @Volatile private var lastModificationCount = -1L
 
-  private data class MapperXml(
-      val file: VirtualFile,
-      val rootTag: XmlTag,
+  // XML SQL index: namespace#methodName -> XmlSqlEntry (only rebuilt on XML changes)
+  private val xmlSqlIndex = ConcurrentHashMap<String, XmlSqlEntry>()
+  @Volatile private var xmlIndexBuilt = false
+
+  private val cacheLock = Any()
+
+  private data class XmlSqlEntry(
+      val sqlType: SqlType,
+      val sql: String,
+      val xmlFile: VirtualFile,
+      val tagName: String,
   )
+
+  init {
+    // Listen for XML file changes to invalidate index
+    project.messageBus
+        .connect()
+        .subscribe(
+            VirtualFileManager.VFS_CHANGES,
+            object : BulkFileListener {
+              override fun after(events: List<VFileEvent>) {
+                for (event in events) {
+                  val file = event.file ?: continue
+                  if (file.extension == "xml") {
+                    invalidateXmlIndex()
+                    break
+                  }
+                }
+              }
+            },
+        )
+  }
 
   /** Analyzes a method to determine whether it is a MyBatis mapper method. */
   fun analyzeMapperMethod(method: PsiMethod): MyBatisMethodInfo {
     return ReadAction.compute<MyBatisMethodInfo, Exception> {
-      clearCachesIfNeeded()
+      clearMethodCacheIfNeeded()
+
       val cacheKey = buildMethodCacheKey(method)
       mapperMethodCache[cacheKey]?.let {
         return@compute it
       }
 
-      val containingClass = method.containingClass ?: return@compute MyBatisMethodInfo()
-
-      if (!isMapperInterface(containingClass)) {
-        val result = MyBatisMethodInfo()
-        mapperMethodCache[cacheKey] = result
-        return@compute result
-      }
-
+      // 1. Try annotation-based SQL (@Select, @Insert, etc.)
       val annotationSql = findAnnotationBasedSql(method)
       if (annotationSql != null) {
         val result =
@@ -69,7 +90,8 @@ class MyBatisAnalyzer(
         return@compute result
       }
 
-      val xmlSql = findXmlBasedSql(containingClass, method)
+      // 2. Try XML-based SQL (from index)
+      val xmlSql = findXmlSqlFromIndex(method)
       if (xmlSql != null) {
         val result =
             MyBatisMethodInfo(
@@ -82,7 +104,8 @@ class MyBatisAnalyzer(
         return@compute result
       }
 
-      val result = MyBatisMethodInfo(isMapperMethod = true)
+      // 3. Not a mapper method
+      val result = MyBatisMethodInfo(isMapperMethod = false)
       mapperMethodCache[cacheKey] = result
       result
     }
@@ -94,7 +117,6 @@ class MyBatisAnalyzer(
       mybatisInfo: MyBatisMethodInfo,
   ): IdeCallGraphNode? {
     return ReadAction.compute<IdeCallGraphNode?, Exception> {
-      clearCachesIfNeeded()
       val containingClass = mapperMethod.containingClass ?: return@compute null
       val sqlType = mybatisInfo.sqlType ?: return@compute null
 
@@ -106,7 +128,7 @@ class MyBatisAnalyzer(
 
       val sqlElement =
           if (!mybatisInfo.isAnnotationBased) {
-            findXmlElementForMethod(containingClass, mapperMethod) ?: mapperMethod
+            findXmlElementForMethod(mapperMethod) ?: mapperMethod
           } else {
             mapperMethod
           }
@@ -114,7 +136,6 @@ class MyBatisAnalyzer(
       val pointer =
           SmartPointerManager.getInstance(project).createSmartPsiElementPointer(sqlElement)
 
-      val elementFile = sqlElement.containingFile?.virtualFile
       val offset = sqlElement.textRange?.startOffset ?: -1
       val lineNumber = calculateLineNumber(sqlElement, offset)
 
@@ -136,53 +157,111 @@ class MyBatisAnalyzer(
     }
   }
 
-  private fun calculateLineNumber(
-      element: PsiElement,
-      offset: Int,
-  ): Int {
-    if (offset < 0) return -1
-    val file = element.containingFile ?: return -1
-    val document = PsiDocumentManager.getInstance(project).getDocument(file) ?: return -1
-    return document.getLineNumber(offset) + 1
+  private fun findXmlSqlFromIndex(method: PsiMethod): XmlSqlEntry? {
+    val containingClass = method.containingClass ?: return null
+    val namespace = containingClass.qualifiedName ?: return null
+
+    buildXmlSqlIndex()
+
+    val key = "$namespace#${method.name}"
+    return xmlSqlIndex[key]
   }
 
-  private fun clearCachesIfNeeded() {
-    val currentCount = PsiModificationTracker.getInstance(project).modificationCount
-    if (currentCount == lastModificationCount) {
-      return
-    }
+  private fun buildXmlSqlIndex() {
+    if (xmlIndexBuilt) return
     synchronized(cacheLock) {
-      if (currentCount == lastModificationCount) {
-        return
+      if (xmlIndexBuilt) return
+
+      val scope = GlobalSearchScope.allScope(project)
+      val xmlFiles =
+          ReadAction.compute<Collection<VirtualFile>, Exception> {
+            FilenameIndex.getAllFilesByExt(project, "xml", scope)
+          }
+
+      for (file in xmlFiles) {
+        try {
+          indexMapperXml(file)
+        } catch (e: Exception) {
+          log.warn("Failed to index XML file: ${file.path}", e)
+        }
       }
+
+      xmlIndexBuilt = true
+    }
+  }
+
+  private fun indexMapperXml(file: VirtualFile): Boolean {
+    return ReadAction.compute<Boolean, Exception> {
+      val psiFile =
+          PsiManager.getInstance(project).findFile(file) as? XmlFile ?: return@compute false
+      val rootTag = psiFile.rootTag ?: return@compute false
+
+      // Quick check: only process <mapper> elements
+      if (rootTag.name != "mapper") return@compute false
+
+      val namespace = rootTag.getAttributeValue("namespace")?.trim()
+      if (namespace.isNullOrEmpty()) return@compute false
+
+      // Index all SQL tags
+      for (tag in rootTag.subTags) {
+        val sqlType =
+            when (tag.name.lowercase()) {
+              "select" -> SqlType.SELECT
+              "insert" -> SqlType.INSERT
+              "update" -> SqlType.UPDATE
+              "delete" -> SqlType.DELETE
+              else -> continue
+            }
+        val id = tag.getAttributeValue("id") ?: continue
+        val sql = tag.value.text.trim()
+
+        val key = "$namespace#$id"
+        xmlSqlIndex[key] = XmlSqlEntry(sqlType, sql, file, tag.name)
+      }
+      true
+    }
+  }
+
+  private fun invalidateXmlIndex() {
+    synchronized(cacheLock) {
+      xmlSqlIndex.clear()
+      xmlIndexBuilt = false
       mapperMethodCache.clear()
-      mapperXmlFileCache.clear()
-      missingXmlFileCache.clear()
+    }
+  }
+
+  private fun clearMethodCacheIfNeeded() {
+    val currentCount = PsiModificationTracker.getInstance(project).modificationCount
+    if (currentCount == lastModificationCount) return
+
+    synchronized(cacheLock) {
+      if (currentCount == lastModificationCount) return
+      mapperMethodCache.clear()
       lastModificationCount = currentCount
     }
   }
 
-  private fun findXmlElementForMethod(
-      containingClass: PsiClass,
-      method: PsiMethod,
-  ): PsiElement? {
-    val mapperXml = findMapperXml(containingClass) ?: return null
-    val methodTags =
-        findChildTags(mapperXml.rootTag, listOf("select", "insert", "update", "delete"))
-    return methodTags.firstOrNull { tag -> tag.getAttributeValue("id") == method.name }
-  }
+  private fun findXmlElementForMethod(method: PsiMethod): PsiElement? {
+    val containingClass = method.containingClass ?: return null
+    val namespace = containingClass.qualifiedName ?: return null
 
-  private fun isMapperInterface(psiClass: PsiClass): Boolean {
-    if (hasAnyAnnotation(psiClass, MyBatisAnnotations.mapperAnnotations)) {
-      return true
+    buildXmlSqlIndex()
+
+    val key = "$namespace#${method.name}"
+    val entry = xmlSqlIndex[key] ?: return null
+
+    return ReadAction.compute<PsiElement?, Exception> {
+      val psiFile =
+          PsiManager.getInstance(project).findFile(entry.xmlFile) as? XmlFile ?: return@compute null
+      val rootTag = psiFile.rootTag ?: return@compute null
+
+      for (tag in rootTag.subTags) {
+        if (tag.getAttributeValue("id") == method.name) {
+          return@compute tag
+        }
+      }
+      null
     }
-
-    val qualifiedName = psiClass.qualifiedName ?: return false
-    if (qualifiedName.contains("mapper", ignoreCase = true)) {
-      return psiClass.isInterface
-    }
-
-    return findMapperXmlFile(psiClass) != null
   }
 
   private fun findAnnotationBasedSql(method: PsiMethod): SqlInfo? {
@@ -225,105 +304,20 @@ class MyBatisAnalyzer(
     return null
   }
 
-  private fun findXmlBasedSql(
-      containingClass: PsiClass,
-      method: PsiMethod,
-  ): XmlSqlInfo? {
-    val mapperXml = findMapperXml(containingClass) ?: return null
-    val methodTags =
-        findChildTags(mapperXml.rootTag, listOf("select", "insert", "update", "delete"))
-
-    for (tag in methodTags) {
-      val id = tag.getAttributeValue("id")
-      if (id == method.name) {
-        val sqlType =
-            when (tag.name.lowercase()) {
-              "select" -> SqlType.SELECT
-              "insert" -> SqlType.INSERT
-              "update" -> SqlType.UPDATE
-              "delete" -> SqlType.DELETE
-              else -> continue
-            }
-
-        val sqlContent = tag.value.text.trim()
-        if (sqlContent.isNotEmpty()) {
-          return XmlSqlInfo(
-              sqlType = sqlType,
-              sql = sqlContent,
-          )
-        }
-      }
-    }
-
-    return null
-  }
-
-  private fun findMapperXmlFile(psiClass: PsiClass): VirtualFile? {
-    val qualifiedName = psiClass.qualifiedName ?: return null
-    mapperXmlFileCache[qualifiedName]?.let {
-      return it
-    }
-    if (missingXmlFileCache.contains(qualifiedName)) {
-      return null
-    }
-
-    val possibleNames = listOf("${psiClass.name}.xml", "${psiClass.name}Mapper.xml")
-    val scope = GlobalSearchScope.allScope(project)
-
-    for (name in possibleNames) {
-      val files = FilenameIndex.getFilesByName(project, name, scope)
-      for (psiFile in files) {
-        val virtualFile = psiFile.virtualFile ?: continue
-        if (isMatchingMapperXml(virtualFile, qualifiedName)) {
-          mapperXmlFileCache[qualifiedName] = virtualFile
-          return virtualFile
-        }
-      }
-    }
-
-    missingXmlFileCache.add(qualifiedName)
-    return null
-  }
-
-  private fun findMapperXml(containingClass: PsiClass): MapperXml? {
-    val xmlFile = findMapperXmlFile(containingClass) ?: return null
-    val xmlPsiFile = PsiManager.getInstance(project).findFile(xmlFile) as? XmlFile ?: return null
-    val rootTag = xmlPsiFile.rootTag ?: return null
-    return MapperXml(xmlFile, rootTag)
+  private fun calculateLineNumber(
+      element: PsiElement,
+      offset: Int,
+  ): Int {
+    if (offset < 0) return -1
+    val file = element.containingFile ?: return -1
+    val document = PsiDocumentManager.getInstance(project).getDocument(file) ?: return -1
+    return document.getLineNumber(offset) + 1
   }
 
   private fun buildMethodCacheKey(method: PsiMethod): String {
     val containingClass = method.containingClass?.qualifiedName ?: "Unknown"
     val paramTypes = method.parameterList.parameters.joinToString(",") { it.type.canonicalText }
     return "$containingClass#${method.name}($paramTypes)"
-  }
-
-  private fun isMatchingMapperXml(
-      virtualFile: VirtualFile,
-      expectedNamespace: String,
-  ): Boolean {
-    val psiFile = PsiManager.getInstance(project).findFile(virtualFile) as? XmlFile ?: return false
-    val rootTag = psiFile.rootTag ?: return false
-
-    if (rootTag.name != "mapper") return false
-
-    val namespace = rootTag.getAttributeValue("namespace")
-    return namespace == expectedNamespace
-  }
-
-  private fun findChildTags(
-      parent: XmlTag,
-      tagNames: List<String>,
-  ): List<XmlTag> {
-    val result = mutableListOf<XmlTag>()
-
-    for (child in parent.subTags) {
-      if (child.name.lowercase() in tagNames) {
-        result.add(child)
-      }
-    }
-
-    return result
   }
 
   private fun extractSqlFromAnnotation(annotation: PsiAnnotation): String? {
@@ -351,11 +345,6 @@ class MyBatisAnalyzer(
   )
 
   private data class SqlInfo(
-      val sqlType: SqlType,
-      val sql: String,
-  )
-
-  private data class XmlSqlInfo(
       val sqlType: SqlType,
       val sql: String,
   )

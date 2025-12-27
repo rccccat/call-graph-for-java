@@ -92,6 +92,7 @@ class CallGraphToolWindowContent(
 
     val actionToolbar =
         ActionManager.getInstance().createActionToolbar("CallGraphToolWindow", actionGroup, true)
+    actionToolbar.targetComponent = this
 
     toolbar.add(actionToolbar.component)
     return toolbar

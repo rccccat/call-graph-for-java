@@ -29,7 +29,7 @@ class SpringApiScanner(
   fun scanAllEndpoints(indicator: ProgressIndicator): List<PsiMethod> {
     return ReadAction.compute<List<PsiMethod>, Exception> {
       val endpoints = mutableListOf<PsiMethod>()
-      val scope = GlobalSearchScope.allScope(project)
+      val scope = GlobalSearchScope.projectScope(project)
       val javaPsiFacade = JavaPsiFacade.getInstance(project)
       val controllerClasses = LinkedHashSet<PsiClass>()
 
@@ -39,7 +39,7 @@ class SpringApiScanner(
       val controllerAnnotationClasses =
           collectControllerAnnotationClasses(
               javaPsiFacade,
-              GlobalSearchScope.allScope(project),
+              GlobalSearchScope.projectScope(project),
               indicator,
           )
       for ((index, annotationClass) in controllerAnnotationClasses.withIndex()) {
@@ -102,6 +102,7 @@ class SpringApiScanner(
 
       val annotationClass =
           ReadAction.compute<PsiClass?, Exception> {
+            // Use allScope to find annotation classes defined in Spring libraries
             javaPsiFacade.findClass(
                 annotationQualifiedName,
                 GlobalSearchScope.allScope(project),

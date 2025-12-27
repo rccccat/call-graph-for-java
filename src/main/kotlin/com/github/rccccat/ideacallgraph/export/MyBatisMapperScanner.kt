@@ -24,7 +24,7 @@ class MyBatisMapperScanner(
     private val scanAllXml: Boolean,
 ) {
   fun scanAllMapperMethods(indicator: ProgressIndicator): List<PsiMethod> {
-    val scope = GlobalSearchScope.allScope(project)
+    val scope = GlobalSearchScope.projectScope(project)
     val javaPsiFacade = JavaPsiFacade.getInstance(project)
     val mapperClasses = mutableSetOf<PsiClass>()
     val xmlNamespaces = mutableSetOf<String>()

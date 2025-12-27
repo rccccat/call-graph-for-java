@@ -93,6 +93,7 @@ class SpringApisToolWindowContent(
         }
     val actionToolbar =
         ActionManager.getInstance().createActionToolbar("SpringApisToolWindow", actionGroup, true)
+    actionToolbar.targetComponent = this
 
     toolbar.add(actionToolbar.component)
     toolbar.addSeparator()

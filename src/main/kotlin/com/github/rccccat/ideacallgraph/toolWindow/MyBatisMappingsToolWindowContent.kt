@@ -20,17 +20,21 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.DocumentAdapter
+import com.intellij.ui.SearchTextField
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JLabel
 import javax.swing.JList
 import javax.swing.JToolBar
 import javax.swing.ListSelectionModel
+import javax.swing.event.DocumentEvent
 
 class MyBatisMappingsToolWindowContent(
     private val project: Project,
@@ -40,6 +44,8 @@ class MyBatisMappingsToolWindowContent(
   private val emptyLabel = JLabel("Click Refresh to scan MyBatis mappers")
   private val scrollPane = JBScrollPane(list)
   private val myBatisAnalyzer = MyBatisAnalyzer(project)
+  private val searchField = SearchTextField()
+  private var allNodes: List<IdeCallGraphNode> = emptyList()
 
   init {
     list.selectionMode = ListSelectionModel.SINGLE_SELECTION
@@ -56,6 +62,7 @@ class MyBatisMappingsToolWindowContent(
     )
 
     val toolbar = createToolbar()
+    configureSearchField()
     add(toolbar, BorderLayout.NORTH)
     add(scrollPane, BorderLayout.CENTER)
 
@@ -71,9 +78,26 @@ class MyBatisMappingsToolWindowContent(
     val actionGroup = DefaultActionGroup().apply { add(RefreshAction()) }
     val actionToolbar =
         ActionManager.getInstance().createActionToolbar("MyBatisToolWindow", actionGroup, true)
+    actionToolbar.targetComponent = this
 
     toolbar.add(actionToolbar.component)
+    toolbar.addSeparator()
+    toolbar.add(searchField)
     return toolbar
+  }
+
+  private fun configureSearchField() {
+    searchField.textEditor.emptyText.text = "Search mapper / SQL / method"
+    val preferredHeight = searchField.preferredSize.height
+    searchField.preferredSize = Dimension(260, preferredHeight)
+    searchField.maximumSize = Dimension(600, preferredHeight)
+    searchField.textEditor.document.addDocumentListener(
+        object : DocumentAdapter() {
+          override fun textChanged(e: DocumentEvent) {
+            applyFilter()
+          }
+        },
+    )
   }
 
   private fun refreshData() {
@@ -125,15 +149,52 @@ class MyBatisMappingsToolWindowContent(
   }
 
   private fun updateList(nodes: List<IdeCallGraphNode>) {
-    listModel.clear()
-    nodes.forEach { listModel.addElement(it) }
+    allNodes = nodes
+    applyFilter()
+  }
 
-    if (nodes.isEmpty()) {
+  private fun applyFilter() {
+    val query = searchField.text.trim().lowercase()
+    val filteredNodes =
+        if (query.isBlank()) {
+          allNodes
+        } else {
+          allNodes.filter { matchesQuery(it, query) }
+        }
+
+    listModel.clear()
+    filteredNodes.forEach { listModel.addElement(it) }
+
+    if (allNodes.isEmpty()) {
       emptyLabel.text = "No MyBatis mappers found"
       showEmptyState()
-    } else {
-      showList()
+      return
     }
+
+    if (filteredNodes.isEmpty()) {
+      emptyLabel.text = "No matches for \"$query\""
+      showEmptyState()
+      return
+    }
+
+    showList()
+  }
+
+  private fun matchesQuery(
+      node: IdeCallGraphNode,
+      query: String,
+  ): Boolean {
+    val combined =
+        listOfNotNull(
+                node.className,
+                node.name,
+                node.signature,
+                node.sqlStatement,
+            )
+            .joinToString(" ")
+            .lowercase()
+    val tokens = query.split(Regex("\\s+")).filter { it.isNotBlank() }
+    return tokens.all { combined.contains(it) }
   }
 
   private fun showEmptyState() {

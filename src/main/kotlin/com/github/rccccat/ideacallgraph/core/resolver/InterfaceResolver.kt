@@ -101,8 +101,11 @@ class InterfaceResolver(
     val lookupResult =
         implementationMethodCache.computeIfAbsent(key) {
           implClass
-              .findMethodsByName(baseMethod.name, false)
-              .firstOrNull { method -> methodSignaturesMatch(method, baseMethod) }
+              .findMethodsByName(baseMethod.name, true) // true = search in superclasses
+              .firstOrNull { method ->
+                methodSignaturesMatch(method, baseMethod) &&
+                    !method.hasModifierProperty(PsiModifier.ABSTRACT)
+              }
               ?.let { MethodLookupResult.Found(it) } ?: MethodLookupResult.Missing
         }
 

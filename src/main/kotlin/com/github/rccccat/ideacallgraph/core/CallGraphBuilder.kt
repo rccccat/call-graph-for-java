@@ -193,7 +193,10 @@ class CallGraphBuilder(
     val method = target as? PsiMethod ?: return true
     val containingClass = method.containingClass ?: return true
     if (!hasImplementations) return true
-    if (containingClass.isInterface) return false
+    // Keep interface default methods (they have a body)
+    if (containingClass.isInterface) {
+      return method.body != null
+    }
     if (method.hasModifierProperty(PsiModifier.ABSTRACT)) return false
     return true
   }

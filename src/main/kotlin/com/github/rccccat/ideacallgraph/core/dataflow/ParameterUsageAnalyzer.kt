@@ -96,7 +96,7 @@ class ParameterUsageAnalyzer(
   private fun buildMethodSignature(method: PsiMethod): String {
     val params =
         method.parameterList.parameters.joinToString(",") {
-          it.type.canonicalText.substringAfterLast('.')
+          it.type.canonicalText // Use full canonical text to avoid package collisions
         }
     return "${method.name}($params)"
   }

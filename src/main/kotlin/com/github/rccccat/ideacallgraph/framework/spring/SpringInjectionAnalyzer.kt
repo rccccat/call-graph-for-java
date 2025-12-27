@@ -26,7 +26,8 @@ class SpringInjectionAnalyzer {
     val qualifierValue = extractQualifier(injectionPoint)
 
     val injectionType = determineInjectionType(injectionPoint)
-    val filteredImplementations = filterImplementationsByPriority(implementations, qualifierValue)
+    val filteredImplementations =
+        filterImplementationsByPriority(implementations, qualifierValue, injectionType)
 
     return SpringInjectionResult(
         selectedImplementations = filteredImplementations,
@@ -93,8 +94,22 @@ class SpringInjectionAnalyzer {
   private fun filterImplementationsByPriority(
       implementations: List<PsiClass>,
       qualifierValue: String?,
+      injectionType: InjectionType,
   ): List<PsiClass> {
-    // If qualifier is specified, find matching implementation
+    // Collection injection: return ALL implementations (except when qualifier is specified)
+    if (injectionType.isCollection) {
+      // Only filter by qualifier if specified
+      if (qualifierValue != null) {
+        val qualifierMatches =
+            implementations.filter { impl -> matchesQualifier(impl, qualifierValue) }
+        if (qualifierMatches.isNotEmpty()) {
+          return qualifierMatches
+        }
+      }
+      return implementations // Return all for collection injection
+    }
+
+    // Single injection: filter by qualifier first, then @Primary
     if (qualifierValue != null) {
       val qualifierMatches =
           implementations.filter { impl -> matchesQualifier(impl, qualifierValue) }
@@ -131,6 +146,22 @@ class SpringInjectionAnalyzer {
       return true
     }
 
+    // Check bean name from component annotations (@Component("name"), @Service("name"), etc.)
+    val componentBeanName =
+        implementation.modifierList
+            ?.annotations
+            ?.find { annotation ->
+              SpringAnnotations.componentAnnotations.any {
+                annotation.qualifiedName?.endsWith(it) == true
+              }
+            }
+            ?.findAttributeValue("value")
+            ?.let { extractFirstStringValue(it) }
+
+    if (componentBeanName != null && componentBeanName == qualifierValue) {
+      return true
+    }
+
     // Check if the bean name matches (simple class name in camelCase)
     val beanName =
         implementation.name?.let { name -> name.substring(0, 1).lowercase() + name.substring(1) }
@@ -163,16 +194,14 @@ class SpringInjectionAnalyzer {
           }
         }
 
-        implementations.any { hasAnnotation(it, SpringAnnotations.primaryAnnotations) } -> {
-          if (injectionType.isCollection) {
-            "Collection injection resolved by @Primary annotation"
-          } else {
-            "Resolved by @Primary annotation"
-          }
-        }
-
+        // Collection injection returns all implementations (not filtered by @Primary)
         injectionType.isCollection -> {
           "Collection injection - all implementations included"
+        }
+
+        // @Primary only applies to single injection
+        implementations.any { hasAnnotation(it, SpringAnnotations.primaryAnnotations) } -> {
+          "Resolved by @Primary annotation"
         }
 
         implementations.size == 1 -> {

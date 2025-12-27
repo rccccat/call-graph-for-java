@@ -14,7 +14,6 @@
         <notificationGroup id="Call Graph" displayType="BALLOON" isLogByDefault="false"/>
 
         <!-- Application-level services -->
-        <applicationService serviceImplementation="com.github.rccccat.ideacallgraph.service.AnalyzerRegistry"/>
         <applicationService serviceImplementation="com.github.rccccat.ideacallgraph.settings.CallGraphAppSettings"/>
 
         <!-- Project-level services -->

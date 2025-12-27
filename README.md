@@ -33,9 +33,12 @@ com.github.rccccat.ideacallgraph/
 │   ├── traversal/          # Graph traversal strategies
 │   │   ├── GraphTraverser
 │   │   └── DepthFirstTraverser
-│   └── resolver/           # Type and interface resolution
-│       ├── TypeResolver
-│       └── InterfaceResolver
+│   ├── resolver/           # Type and interface resolution
+│   │   ├── TypeResolver
+│   │   └── InterfaceResolver
+│   └── dataflow/           # Parameter usage and data flow analysis
+│       ├── ParameterUsageAnalyzer
+│       └── SliceDataFlowAnalyzer
 ├── framework/              # Framework-specific analyzers
 │   ├── spring/             # SpringAnalyzer + JavaSpringAnalyzer + SpringInjectionAnalyzer
 │   └── mybatis/            # MyBatisAnalyzer
@@ -48,8 +51,7 @@ com.github.rccccat.ideacallgraph/
 │   ├── model/              # IdeCallGraphNode, IdeCallGraph (with PSI pointers)
 │   └── psi/                # PsiNodeFactory
 ├── service/                # Service layer
-│   ├── CallGraphServiceImpl
-│   └── AnalyzerRegistry
+│   └── CallGraphServiceImpl
 ├── settings/               # Configuration and UI
 │   ├── CallGraphConfigurable
 │   ├── CallGraphProjectSettings
@@ -67,6 +69,10 @@ com.github.rccccat.ideacallgraph/
 │   └── toolwindow/
 │       └── TreeConfiguration
 └── util/                   # Annotation helpers and PSI utilities
+    ├── AnnotationUtils
+    ├── AnnotationSearch
+    ├── FrameworkAnnotations
+    └── ProjectCodeUtils
 ```
 
 ### Key Design Patterns
@@ -87,7 +93,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 1. **Generate Call Graph**:
    - Right-click on any method in your Java code
    - Select "Generate Call Graph" from the context menu
-   - Or use the keyboard shortcut `Ctrl+Alt+G`
+   - Or use the keyboard shortcut `Ctrl+Alt+G` (Windows/Linux) / `Cmd+Alt+G` (Mac)
 
 2. **View Results**:
    - The call graph will appear in the "Call Graph" tool window
@@ -164,11 +170,17 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 # Run tests
 ./gradlew test
 
+# Run a specific test class
+./gradlew test --tests "com.github.rccccat.ideacallgraph.service.CallGraphServiceJavaTest"
+
 # Build plugin distribution (creates zip in build/distributions)
 ./gradlew buildPlugin
 
-# Format code
+# Format code (required before commits)
 ./gradlew ktfmtFormat
+
+# Verify plugin compatibility
+./gradlew verifyPlugin
 ```
 
 ### Tech Stack
@@ -184,7 +196,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 2. Create a feature branch
 3. Make your changes
 4. Run `./gradlew ktfmtFormat` to format code
-5. Add tests if applicable
+5. Run `./gradlew test` to ensure tests pass
 6. Submit a pull request
 
 ## License

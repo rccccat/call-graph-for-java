@@ -17,11 +17,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run a specific test class
 ./gradlew test --tests "com.github.rccccat.ideacallgraph.service.CallGraphServiceJavaTest"
 
+# Run a specific test method
+./gradlew test --tests "com.github.rccccat.ideacallgraph.service.CallGraphServiceJavaTest.testSimpleDirectCall"
+
 # Clean build
 ./gradlew clean build
 
 # Format code (required before commits)
 ./gradlew ktfmtFormat
+
+# Check format without fixing
+./gradlew ktfmtCheck
 
 # Verify plugin compatibility
 ./gradlew verifyPlugin
@@ -37,7 +43,7 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 ## Architecture
 
 ### Core Flow
-1. **Action Trigger**: `GenerateCallGraphAction` is invoked from editor context menu (Ctrl+Alt+G)
+1. **Action Trigger**: `GenerateCallGraphAction` is invoked from editor context menu (Ctrl+Alt+G / Cmd+Alt+G on Mac)
 2. **Build Graph**: `CallGraphServiceImpl` delegates to `CallGraphBuilder` to traverse PSI elements
 3. **Display**: `CallGraphToolWindowContent` renders the graph as an interactive tree
 
@@ -48,6 +54,7 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 - `visitor/CallVisitor` + `JavaCallVisitor` - PSI traversal
 - `traversal/GraphTraverser` + `DepthFirstTraverser` - Traversal strategy
 - `resolver/TypeResolver` + `InterfaceResolver` - Type resolution and interface dispatch
+- `dataflow/ParameterUsageAnalyzer` + `SliceDataFlowAnalyzer` - Parameter usage and data flow analysis
 
 **Framework Layer** (`framework/`):
 - `spring/SpringAnalyzer` - Unified Spring analysis facade (with `JavaSpringAnalyzer`, `SpringInjectionAnalyzer`)
@@ -63,7 +70,6 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 
 **Service Layer** (`service/`):
 - `CallGraphServiceImpl` - Main service implementation
-- `AnalyzerRegistry` - Framework analyzer registration
 
 **Export** (`export/`):
 - `JsonExporter` / `CodeExtractor` - JSON export with code snippets
@@ -82,3 +88,14 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 - Uses SmartPsiElementPointer to safely reference PSI elements across EDT operations
 - ReadAction.compute() is used for PSI access from background threads
 - Depth limits: separate settings for project code vs third-party libraries
+
+## Testing
+
+Tests extend `BasePlatformTestCase` from the IntelliJ Platform Test Framework. Framework stubs (Spring, MyBatis, Java collections) are defined in `TestStubs.kt` and added to tests via extension functions like `myFixture.addSpringCoreStubs()`.
+
+Test pattern:
+1. Add stub files for required framework annotations
+2. Create test file via `myFixture.addFileToProject()`
+3. Find the target `PsiMethod`
+4. Build graph via `CallGraphServiceImpl`
+5. Assert on graph edges and structure

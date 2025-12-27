@@ -67,25 +67,62 @@ class TypeResolver(
     }
   }
 
-  /** Finds a class by name, with package context awareness. */
+  /** Finds a class by name, with import and package context awareness. */
   fun findClassByName(
       qualifiedName: String,
       contextElement: PsiElement?,
   ): PsiClass? {
     val scope = GlobalSearchScope.allScope(project)
+
+    // Fully qualified name - direct lookup
     if (qualifiedName.contains(".")) {
       return javaPsiFacade.findClass(qualifiedName, scope)
     }
 
-    val contextPackage =
-        (contextElement?.containingFile as? PsiJavaFile)?.packageName?.takeIf { it.isNotBlank() }
+    val javaFile = contextElement?.containingFile as? PsiJavaFile
 
+    // Resolution order per JLS:
+    // 1. Current package (highest priority)
+    val contextPackage = javaFile?.packageName?.takeIf { it.isNotBlank() }
     if (contextPackage != null) {
       javaPsiFacade.findClass("$contextPackage.$qualifiedName", scope)?.let {
         return it
       }
     }
 
+    // 2. Explicit single-type imports
+    if (javaFile != null) {
+      val importList = javaFile.importList
+      importList?.importStatements?.forEach { importStatement ->
+        if (!importStatement.isOnDemand) {
+          val importedName = importStatement.qualifiedName
+          if (importedName != null && importedName.endsWith(".$qualifiedName")) {
+            javaPsiFacade.findClass(importedName, scope)?.let {
+              return it
+            }
+          }
+        }
+      }
+
+      // 3. On-demand (wildcard) imports
+      importList?.importStatements?.forEach { importStatement ->
+        if (importStatement.isOnDemand) {
+          val packageName = importStatement.qualifiedName
+          if (packageName != null) {
+            javaPsiFacade.findClass("$packageName.$qualifiedName", scope)?.let {
+              return it
+            }
+          }
+        }
+      }
+    }
+
+    // 4. java.lang is implicitly imported
+    javaPsiFacade.findClass("java.lang.$qualifiedName", scope)?.let {
+      return it
+    }
+
+    // 5. Fallback to short name cache (last resort)
     return PsiShortNamesCache.getInstance(project)
         .getClassesByName(qualifiedName, scope)
         .firstOrNull()
@@ -98,7 +135,8 @@ class TypeResolver(
     val typeArgs = typeText.substringAfter("<", "").substringBeforeLast(">", "")
     if (typeArgs.isBlank()) return null
 
-    val parts = typeArgs.split(",").map { it.trim() }
+    // Parse with bracket awareness to handle nested generics
+    val parts = splitTypeArguments(typeArgs)
     return when (rawTypeName) {
       "java.util.Map",
       "Map",
@@ -106,6 +144,47 @@ class TypeResolver(
 
       else -> parts.firstOrNull()
     }
+  }
+
+  /**
+   * Splits type arguments respecting nested generic brackets. For example: "String, List<Integer>"
+   * -> ["String", "List<Integer>"]
+   */
+  private fun splitTypeArguments(typeArgs: String): List<String> {
+    val result = mutableListOf<String>()
+    val current = StringBuilder()
+    var depth = 0
+
+    for (char in typeArgs) {
+      when (char) {
+        '<' -> {
+          depth++
+          current.append(char)
+        }
+
+        '>' -> {
+          depth--
+          current.append(char)
+        }
+
+        ',' -> {
+          if (depth == 0) {
+            result.add(current.toString().trim())
+            current.clear()
+          } else {
+            current.append(char)
+          }
+        }
+
+        else -> current.append(char)
+      }
+    }
+
+    if (current.isNotBlank()) {
+      result.add(current.toString().trim())
+    }
+
+    return result
   }
 
   companion object {

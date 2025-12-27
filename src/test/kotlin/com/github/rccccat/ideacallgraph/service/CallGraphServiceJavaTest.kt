@@ -295,7 +295,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     assertNoEdgeFromClass(graph, "PaymentController", "StripePaymentService", "pay")
   }
 
-  fun testCollectionInjectionRespectsPrimary() {
+  fun testCollectionInjectionIncludesAllBeans() {
     val file =
         myFixture.addFileToProject(
             "src/demo/CollectionInjectionFlow.java",
@@ -336,9 +336,10 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
 
+    // Collection injection should include ALL beans, not just @Primary
     assertEdgeFromHandle(graph, "pay")
     assertEdgeFromClass(graph, "PaymentController", "PrimaryPaymentService", "pay")
-    assertNoEdgeFromClass(graph, "PaymentController", "SecondaryPaymentService", "pay")
+    assertEdgeFromClass(graph, "PaymentController", "SecondaryPaymentService", "pay")
   }
 
   fun testSpringServiceNodeType() {

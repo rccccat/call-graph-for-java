@@ -4,6 +4,7 @@ import com.github.rccccat.ideacallgraph.core.resolver.InterfaceResolver
 import com.github.rccccat.ideacallgraph.core.resolver.TypeResolver
 import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
+import com.github.rccccat.ideacallgraph.util.ExcludePatternMatcher
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiExpression
@@ -30,4 +31,5 @@ class VisitorContext(
     val typeResolver: TypeResolver,
     val interfaceResolver: InterfaceResolver,
     val springAnalyzer: SpringAnalyzer,
+    val excludePatternMatcher: ExcludePatternMatcher,
 )

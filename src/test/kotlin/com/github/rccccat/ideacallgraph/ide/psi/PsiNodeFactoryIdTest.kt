@@ -1,5 +1,6 @@
 package com.github.rccccat.ideacallgraph.ide.psi
 
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
 import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.intellij.psi.PsiMethod
@@ -49,7 +50,12 @@ class PsiNodeFactoryIdTest : BasePlatformTestCase() {
 
     assertEquals(4, methods.size)
 
-    val factory = PsiNodeFactory(project, SpringAnalyzer(), MyBatisAnalyzer(project))
+    val factory =
+        PsiNodeFactory(
+            project,
+            SpringAnalyzer(),
+            MyBatisAnalyzer(project, CallGraphCacheManager.getInstance(project)),
+        )
     val ids =
         methods.map { method -> factory.createNodeData(method)?.id ?: error("Node data missing") }
 

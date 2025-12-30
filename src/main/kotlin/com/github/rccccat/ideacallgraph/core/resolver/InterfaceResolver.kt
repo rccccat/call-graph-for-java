@@ -1,6 +1,7 @@
 package com.github.rccccat.ideacallgraph.core.resolver
 
 import com.github.rccccat.ideacallgraph.core.visitor.ImplementationInfo
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.JdkOrderEntry
@@ -19,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 class InterfaceResolver(
     private val project: Project,
     private val springAnalyzer: SpringAnalyzer,
+    private val cacheManager: CallGraphCacheManager,
 ) {
   private sealed interface MethodLookupResult {
     data class Found(val method: PsiMethod) : MethodLookupResult
@@ -26,8 +28,10 @@ class InterfaceResolver(
     object Missing : MethodLookupResult
   }
 
-  private val inheritingClassesCache = ConcurrentHashMap<String, List<PsiClass>>()
-  private val implementationMethodCache = ConcurrentHashMap<String, MethodLookupResult>()
+  private val inheritingClassesCache =
+      cacheManager.createCachedValue { ConcurrentHashMap<String, List<PsiClass>>() }
+  private val implementationMethodCache =
+      cacheManager.createCachedValue { ConcurrentHashMap<String, MethodLookupResult>() }
 
   /**
    * Resolves interface implementations and class overrides with Spring DI awareness. Filters based
@@ -77,7 +81,8 @@ class InterfaceResolver(
 
   private fun findInheritingClasses(baseClass: PsiClass): List<PsiClass> {
     val key = baseClass.qualifiedName ?: return emptyList()
-    return inheritingClassesCache.getOrPut(key) {
+    val cache = inheritingClassesCache.value
+    return cache.computeIfAbsent(key) {
       val fileIndex = ProjectFileIndex.getInstance(project)
       ClassInheritorsSearch.search(
               baseClass,
@@ -119,7 +124,7 @@ class InterfaceResolver(
     val key = "${implClass.qualifiedName}#$baseOwner#$signature"
 
     val lookupResult =
-        implementationMethodCache.computeIfAbsent(key) {
+        implementationMethodCache.value.computeIfAbsent(key) {
           implClass
               .findMethodsByName(baseMethod.name, true) // true = search in superclasses
               .firstOrNull { method ->
@@ -148,8 +153,4 @@ class InterfaceResolver(
     }
   }
 
-  fun resetCaches() {
-    inheritingClassesCache.clear()
-    implementationMethodCache.clear()
-  }
 }

@@ -1,5 +1,6 @@
 package com.github.rccccat.ideacallgraph.toolWindow
 
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.export.SpringApiScanner
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
@@ -49,6 +50,7 @@ class SpringApisToolWindowContent(
   private val emptyLabel = JLabel("Click Refresh to scan Spring API endpoints")
   private val scrollPane = JBScrollPane(list)
   private val service = CallGraphServiceImpl.getInstance(project)
+  private val cacheManager = CallGraphCacheManager.getInstance(project)
   private val nodeFactory = service.getNodeFactory()
   private val searchField = SearchTextField()
   private var allNodes: List<IdeCallGraphNode> = emptyList()
@@ -124,7 +126,7 @@ class SpringApisToolWindowContent(
             object : Task.Backgroundable(project, "Scanning Spring APIs", true) {
               override fun run(indicator: ProgressIndicator) {
                 service.resetCaches()
-                val scanner = SpringApiScanner(project)
+                val scanner = SpringApiScanner(project, cacheManager)
                 val nodes =
                     try {
                       ReadAction.compute<List<IdeCallGraphNode>, Exception> {
@@ -252,7 +254,6 @@ class SpringApisToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "Exporting Spring APIs", true) {
               override fun run(indicator: ProgressIndicator) {
-                service.resetCaches()
                 var successCount = 0
                 var failCount = 0
 

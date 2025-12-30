@@ -2,6 +2,7 @@ package com.github.rccccat.ideacallgraph.export
 
 import com.github.rccccat.ideacallgraph.addSpringCoreStubs
 import com.github.rccccat.ideacallgraph.addSpringWebStubs
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
@@ -29,7 +30,9 @@ class SpringApiScannerTest : BasePlatformTestCase() {
             .trimIndent(),
     )
 
-    val endpoints = SpringApiScanner(project).scanAllEndpoints(EmptyProgressIndicator())
+    val endpoints =
+        SpringApiScanner(project, CallGraphCacheManager.getInstance(project))
+            .scanAllEndpoints(EmptyProgressIndicator())
 
     assertEquals(1, endpoints.size)
     assertEquals("ping", endpoints.first().name)
@@ -96,7 +99,9 @@ class SpringApiScannerTest : BasePlatformTestCase() {
             .trimIndent(),
     )
 
-    val endpoints = SpringApiScanner(project).scanAllEndpoints(EmptyProgressIndicator())
+    val endpoints =
+        SpringApiScanner(project, CallGraphCacheManager.getInstance(project))
+            .scanAllEndpoints(EmptyProgressIndicator())
     val endpointNames = endpoints.map { it.name }.toSet()
 
     assertEquals(setOf("health", "create"), endpointNames)
@@ -131,7 +136,9 @@ class SpringApiScannerTest : BasePlatformTestCase() {
             .trimIndent(),
     )
 
-    val endpoints = SpringApiScanner(project).scanAllEndpoints(EmptyProgressIndicator())
+    val endpoints =
+        SpringApiScanner(project, CallGraphCacheManager.getInstance(project))
+            .scanAllEndpoints(EmptyProgressIndicator())
     val endpointNames = endpoints.map { it.name }.toSet()
 
     assertTrue(endpointNames.contains("list"))
@@ -180,7 +187,9 @@ class SpringApiScannerTest : BasePlatformTestCase() {
             .trimIndent(),
     )
 
-    val endpoints = SpringApiScanner(project).scanAllEndpoints(EmptyProgressIndicator())
+    val endpoints =
+        SpringApiScanner(project, CallGraphCacheManager.getInstance(project))
+            .scanAllEndpoints(EmptyProgressIndicator())
     val endpointNames = endpoints.map { it.name }.toSet()
 
     assertTrue(endpointNames.contains("ping"))

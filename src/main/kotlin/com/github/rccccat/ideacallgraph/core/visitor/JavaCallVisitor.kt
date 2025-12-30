@@ -253,8 +253,14 @@ class JavaCallVisitor {
       context: VisitorContext,
   ): List<ImplementationInfo>? {
     if (!context.settings.resolveInterfaceImplementations) return null
+    if (context.excludePatternMatcher.matchesMethod(method)) return null
     val implementations =
         context.interfaceResolver.resolveMethodImplementationsAdvanced(method, injectionPoint)
-    return implementations.ifEmpty { null }
+    val filteredImplementations =
+        implementations.filterNot { impl ->
+          val implMethod = impl.implementationMethod as? PsiMethod ?: return@filterNot false
+          context.excludePatternMatcher.matchesMethod(implMethod)
+        }
+    return filteredImplementations.ifEmpty { null }
   }
 }

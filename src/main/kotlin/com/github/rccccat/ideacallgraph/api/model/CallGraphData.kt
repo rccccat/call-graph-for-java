@@ -9,10 +9,12 @@ import java.io.Serializable
 data class CallGraphData(
     val rootNodeId: String,
     val nodes: Map<String, CallGraphNodeData>,
-    val edges: List<CallGraphEdgeData>,
+    val outgoingByFromId: Map<String, List<String>>,
 ) : Serializable {
   fun getCallTargets(nodeId: String): List<CallGraphNodeData> =
-      edges.filter { it.fromId == nodeId }.mapNotNull { nodes[it.toId] }
+      getCallTargetIds(nodeId).mapNotNull { nodes[it] }
+
+  fun getCallTargetIds(nodeId: String): List<String> = outgoingByFromId[nodeId].orEmpty()
 
   companion object {
     private const val serialVersionUID: Long = 1L
@@ -59,14 +61,4 @@ enum class SqlType {
   INSERT,
   UPDATE,
   DELETE,
-}
-
-/** Pure data model for a call graph edge. */
-data class CallGraphEdgeData(
-    val fromId: String,
-    val toId: String,
-) : Serializable {
-  companion object {
-    private const val serialVersionUID: Long = 1L
-  }
 }

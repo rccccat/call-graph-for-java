@@ -502,10 +502,8 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
     // 验证 handle 到 process 的边数量（应该有 3 条边，每个重载一条）
     val handleNode = graph.nodes.values.firstOrNull { it.name == "handle" }
     val edgesToProcess =
-        graph.edges.filter { edge ->
-          edge.fromId == handleNode?.id &&
-              graph.nodes[edge.toId]?.name == "process" &&
-              graph.nodes[edge.toId]?.className == "Service"
+        getOutgoingTargets(graph, handleNode?.id).filter { target ->
+          target.name == "process" && target.className == "Service"
         }
     assertTrue(
         "Should have 3 edges to process overloads, found: ${edgesToProcess.size}",
@@ -730,7 +728,7 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
     // 如果 closeNode 存在，验证从 handle 到 close 的边
     if (closeNode != null) {
       val hasEdgeToClose =
-          graph.edges.any { it.fromId == handleNode?.id && it.toId == closeNode.id }
+          hasEdgeById(graph, handleNode?.id, closeNode.id)
       assertTrue(
           "Expected edge from handle to close() for try-with-resources. " +
               "This verifies implicit close() call is detected.",
@@ -902,17 +900,12 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
     val from = "handle"
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     val fromEdges =
-        graph.edges
-            .filter { edge -> edge.fromId == fromNode?.id }
-            .joinToString { edge ->
-              val toNode = graph.nodes[edge.toId]
-              "$from->${toNode?.className}.${toNode?.name}"
-            }
+        getOutgoingTargets(graph, fromNode?.id).joinToString { target ->
+          "$from->${target.className}.${target.name}"
+        }
     assertTrue(
         "Missing edge $from -> $to. Existing: $fromEdges",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -920,10 +913,26 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     assertTrue(
         "Missing edge $from -> $to",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
+  }
+
+  private fun hasEdgeById(
+      graph: CallGraphData,
+      fromId: String?,
+      toId: String?,
+  ): Boolean {
+    if (fromId == null || toId == null) return false
+    return graph.getCallTargetIds(fromId).contains(toId)
+  }
+
+  private fun getOutgoingTargets(
+      graph: CallGraphData,
+      fromNodeId: String?,
+  ) = if (fromNodeId == null) {
+    emptyList()
+  } else {
+    graph.getCallTargets(fromNodeId)
   }
 
   private fun updateSettings(block: CallGraphAppSettings.State.() -> Unit) {
@@ -940,7 +949,6 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 
   private fun cloneSettings(state: CallGraphAppSettings.State): CallGraphAppSettings.State =

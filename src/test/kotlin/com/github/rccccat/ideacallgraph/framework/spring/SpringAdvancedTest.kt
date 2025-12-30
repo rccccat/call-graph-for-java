@@ -503,17 +503,12 @@ class SpringAdvancedTest : BasePlatformTestCase() {
     val from = "handle"
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     val fromEdges =
-        graph.edges
-            .filter { edge -> edge.fromId == fromNode?.id }
-            .joinToString { edge ->
-              val toNode = graph.nodes[edge.toId]
-              "$from->${toNode?.className}.${toNode?.name}"
-            }
+        getOutgoingTargets(graph, fromNode?.id).joinToString { target ->
+          "$from->${target.className}.${target.name}"
+        }
     assertTrue(
         "Missing edge $from -> $to. Existing: $fromEdges",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -521,9 +516,7 @@ class SpringAdvancedTest : BasePlatformTestCase() {
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     assertTrue(
         "Missing edge $from -> $to",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -535,12 +528,31 @@ class SpringAdvancedTest : BasePlatformTestCase() {
   ) {
     assertTrue(
         "Missing edge from $fromClass to $toClass.$toMethod",
-        graph.edges.any { edge ->
-          graph.nodes[edge.fromId]?.className == fromClass &&
-              graph.nodes[edge.toId]?.className == toClass &&
-              graph.nodes[edge.toId]?.name == toMethod
-        },
+        hasEdgeFromClass(graph, fromClass, toClass, toMethod),
     )
+  }
+
+  private fun hasEdgeFromClass(
+      graph: CallGraphData,
+      fromClass: String,
+      toClass: String,
+      toMethod: String,
+  ): Boolean {
+    val fromNodes = graph.nodes.values.filter { node -> node.className == fromClass }
+    return fromNodes.any { fromNode ->
+      getOutgoingTargets(graph, fromNode.id).any { target ->
+        target.className == toClass && target.name == toMethod
+      }
+    }
+  }
+
+  private fun getOutgoingTargets(
+      graph: CallGraphData,
+      fromNodeId: String?,
+  ) = if (fromNodeId == null) {
+    emptyList()
+  } else {
+    graph.getCallTargets(fromNodeId)
   }
 
   private fun updateSettings(block: CallGraphAppSettings.State.() -> Unit) {
@@ -557,7 +569,6 @@ class SpringAdvancedTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 
   private fun cloneSettings(state: CallGraphAppSettings.State): CallGraphAppSettings.State =

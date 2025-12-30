@@ -138,7 +138,7 @@ class EdgeCasesTest : BasePlatformTestCase() {
     // 验证 m2 没有到 m3 的边（因为深度限制）
     val m3Node = graph.nodes.values.find { it.name == "m3" }
     if (m3Node != null) {
-      val hasEdgeFromM2ToM3 = graph.edges.any { it.fromId == m2Node?.id && it.toId == m3Node.id }
+      val hasEdgeFromM2ToM3 = hasEdgeById(graph, m2Node?.id, m3Node.id)
       assertFalse("m2 should not have edge to m3 due to depth limit", hasEdgeFromM2ToM3)
     }
 
@@ -195,7 +195,7 @@ class EdgeCasesTest : BasePlatformTestCase() {
 
     // 验证 L5 没有到 L6 的边（如果 L6 存在的话）
     if (l6Node != null) {
-      val hasEdgeFromL5ToL6 = graph.edges.any { it.fromId == l5Node?.id && it.toId == l6Node.id }
+      val hasEdgeFromL5ToL6 = hasEdgeById(graph, l5Node?.id, l6Node.id)
       assertFalse("L5 should not have edge to L6 due to depth limit", hasEdgeFromL5ToL6)
     }
 
@@ -436,20 +436,20 @@ class EdgeCasesTest : BasePlatformTestCase() {
     val afterProcessNode = graph.nodes.values.find { it.name == "afterProcess" }
     assertNotNull("afterProcess should exist", afterProcessNode)
     val hasEdgeToAfterProcess =
-        graph.edges.any { it.fromId == childProcessNode?.id && it.toId == afterProcessNode?.id }
+        hasEdgeById(graph, childProcessNode?.id, afterProcessNode?.id)
     assertTrue("Child.process should call afterProcess", hasEdgeToAfterProcess)
 
     // Child.process 通过 super.process() 调用 Parent.process
     if (parentProcessNode != null) {
       val hasEdgeToParentProcess =
-          graph.edges.any { it.fromId == childProcessNode?.id && it.toId == parentProcessNode.id }
+          hasEdgeById(graph, childProcessNode?.id, parentProcessNode.id)
       assertTrue("Child.process should call Parent.process via super", hasEdgeToParentProcess)
 
       // Parent.process 调用 doWork
       val doWorkNode = graph.nodes.values.find { it.name == "doWork" }
       if (doWorkNode != null) {
         val hasEdgeToDoWork =
-            graph.edges.any { it.fromId == parentProcessNode.id && it.toId == doWorkNode.id }
+            hasEdgeById(graph, parentProcessNode.id, doWorkNode.id)
         assertTrue("Parent.process should call doWork", hasEdgeToDoWork)
       }
     }
@@ -482,8 +482,8 @@ class EdgeCasesTest : BasePlatformTestCase() {
     assertEdgeFromHandle(graph, "emptyMethod")
     // emptyMethod 应该没有出边
     val emptyMethodNode = graph.nodes.values.find { it.name == "emptyMethod" }
-    val outgoingEdges = graph.edges.filter { it.fromId == emptyMethodNode?.id }
-    assertTrue("emptyMethod should have no outgoing edges", outgoingEdges.isEmpty())
+    val outgoingTargets = getOutgoingTargets(graph, emptyMethodNode?.id)
+    assertTrue("emptyMethod should have no outgoing edges", outgoingTargets.isEmpty())
   }
 
   // ==================== Helper Methods ====================
@@ -502,17 +502,12 @@ class EdgeCasesTest : BasePlatformTestCase() {
     val from = "handle"
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     val fromEdges =
-        graph.edges
-            .filter { edge -> edge.fromId == fromNode?.id }
-            .joinToString { edge ->
-              val toNode = graph.nodes[edge.toId]
-              "$from->${toNode?.className}.${toNode?.name}"
-            }
+        getOutgoingTargets(graph, fromNode?.id).joinToString { target ->
+          "$from->${target.className}.${target.name}"
+        }
     assertTrue(
         "Missing edge $from -> $to. Existing: $fromEdges",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -520,10 +515,26 @@ class EdgeCasesTest : BasePlatformTestCase() {
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     assertTrue(
         "Missing edge $from -> $to",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
+  }
+
+  private fun hasEdgeById(
+      graph: CallGraphData,
+      fromId: String?,
+      toId: String?,
+  ): Boolean {
+    if (fromId == null || toId == null) return false
+    return graph.getCallTargetIds(fromId).contains(toId)
+  }
+
+  private fun getOutgoingTargets(
+      graph: CallGraphData,
+      fromNodeId: String?,
+  ) = if (fromNodeId == null) {
+    emptyList()
+  } else {
+    graph.getCallTargets(fromNodeId)
   }
 
   private fun updateSettings(block: CallGraphAppSettings.State.() -> Unit) {
@@ -540,7 +551,6 @@ class EdgeCasesTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 
   private fun cloneSettings(state: CallGraphAppSettings.State): CallGraphAppSettings.State =

@@ -121,6 +121,83 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     assertEdgeFromClass(graph, "StripePaymentService", "PaymentRepository", "save")
   }
 
+  fun testExcludePatternSkipsImplementationByClassName() {
+    updateSettings {
+      excludePackagePatterns = mutableListOf("class:StripePaymentService")
+      resolveInterfaceImplementations = true
+    }
+    val file =
+        myFixture.addFileToProject(
+            "src/demo/OrderFlowExcluded.java",
+            """
+            package demo;
+            import org.springframework.stereotype.Service;
+
+            interface PaymentService {
+                void pay(String orderId);
+            }
+
+            @Service
+            class StripePaymentService implements PaymentService {
+                public void pay(String orderId) { }
+            }
+
+            class PaypalPaymentService implements PaymentService {
+                public void pay(String orderId) { }
+            }
+
+            class OrderController {
+                private final PaymentService paymentService = new StripePaymentService();
+
+                public void handle() {
+                    paymentService.pay("ORDER-1");
+                }
+            }
+            """
+                .trimIndent(),
+        )
+
+    val method = findHandleMethod(file)
+    val graph = buildGraph(method)
+
+    assertEdgeFromHandle(graph, "pay")
+    assertNoEdgeFromClass(graph, "OrderController", "StripePaymentService", "pay")
+    assertEdgeFromClass(graph, "OrderController", "PaypalPaymentService", "pay")
+  }
+
+  fun testExcludePatternSkipsMethodSignature() {
+    updateSettings {
+      excludePackagePatterns = mutableListOf("sig:demo.Worker#work(java.lang.String)")
+    }
+    val file =
+        myFixture.addFileToProject(
+            "src/demo/ExcludeSignatureFlow.java",
+            """
+            package demo;
+            class Worker {
+                void work(String value) { }
+                void work(int value) { }
+            }
+            class Flow {
+                void handle() {
+                    new Worker().work("x");
+                    new Worker().work(1);
+                }
+            }
+            """
+                .trimIndent(),
+        )
+
+    val method = findHandleMethod(file)
+    val graph = buildGraph(method)
+    val fromNode = graph.nodes.values.firstOrNull { it.name == "handle" }
+    val targetSignatures =
+        getOutgoingTargets(graph, fromNode?.id).map { target -> target.signature }
+
+    assertTrue(targetSignatures.any { signature -> signature.contains("work(int") })
+    assertFalse(targetSignatures.any { signature -> signature.contains("work(String") })
+  }
+
   fun testInterfaceImplementationWithQualifier() {
     val file =
         myFixture.addFileToProject(
@@ -564,17 +641,12 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val from = "handle"
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     val fromEdges =
-        graph.edges
-            .filter { edge -> edge.fromId == fromNode?.id }
-            .joinToString { edge ->
-              val toNode = graph.nodes[edge.toId]
-              "$from->${toNode?.className}.${toNode?.name}"
-            }
+        getOutgoingTargets(graph, fromNode?.id).joinToString { target ->
+          "$from->${target.className}.${target.name}"
+        }
     assertTrue(
         "Missing edge $from -> $to. Existing: $fromEdges",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -585,17 +657,12 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val from = "handle"
     val fromNode = graph.nodes.values.firstOrNull { it.name == from }
     val fromEdges =
-        graph.edges
-            .filter { edge -> edge.fromId == fromNode?.id }
-            .joinToString { edge ->
-              val toNode = graph.nodes[edge.toId]
-              "$from->${toNode?.className}.${toNode?.name}"
-            }
+        getOutgoingTargets(graph, fromNode?.id).joinToString { target ->
+          "$from->${target.className}.${target.name}"
+        }
     assertFalse(
         "Unexpected edge $from -> $to. Existing: $fromEdges",
-        graph.edges.any { edge ->
-          edge.fromId == fromNode?.id && graph.nodes[edge.toId]?.name == to
-        },
+        getOutgoingTargets(graph, fromNode?.id).any { target -> target.name == to },
     )
   }
 
@@ -606,11 +673,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
       toMethod: String,
   ) {
     assertTrue(
-        graph.edges.any { edge ->
-          graph.nodes[edge.fromId]?.className == fromClass &&
-              graph.nodes[edge.toId]?.className == toClass &&
-              graph.nodes[edge.toId]?.name == toMethod
-        },
+        hasEdgeFromClass(graph, fromClass, toClass, toMethod),
     )
   }
 
@@ -621,12 +684,31 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
       toMethod: String,
   ) {
     assertFalse(
-        graph.edges.any { edge ->
-          graph.nodes[edge.fromId]?.className == fromClass &&
-              graph.nodes[edge.toId]?.className == toClass &&
-              graph.nodes[edge.toId]?.name == toMethod
-        },
+        hasEdgeFromClass(graph, fromClass, toClass, toMethod),
     )
+  }
+
+  private fun hasEdgeFromClass(
+      graph: CallGraphData,
+      fromClass: String,
+      toClass: String,
+      toMethod: String,
+  ): Boolean {
+    val fromNodes = graph.nodes.values.filter { node -> node.className == fromClass }
+    return fromNodes.any { fromNode ->
+      getOutgoingTargets(graph, fromNode.id).any { target ->
+        target.className == toClass && target.name == toMethod
+      }
+    }
+  }
+
+  private fun getOutgoingTargets(
+      graph: CallGraphData,
+      fromNodeId: String?,
+  ) = if (fromNodeId == null) {
+    emptyList()
+  } else {
+    graph.getCallTargets(fromNodeId)
   }
 
   private fun updateSettings(block: CallGraphAppSettings.State.() -> Unit) {
@@ -643,7 +725,6 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 
   private fun cloneSettings(state: CallGraphAppSettings.State): CallGraphAppSettings.State =

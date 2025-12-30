@@ -2,12 +2,10 @@ package com.github.rccccat.ideacallgraph.core
 
 import com.github.rccccat.ideacallgraph.api.model.CallGraphNodeData
 import com.github.rccccat.ideacallgraph.api.model.NodeType
-import com.github.rccccat.ideacallgraph.core.dataflow.ParameterUsageAnalyzer
 import com.github.rccccat.ideacallgraph.core.resolver.InterfaceResolver
 import com.github.rccccat.ideacallgraph.core.resolver.TypeResolver
 import com.github.rccccat.ideacallgraph.core.traversal.DepthFirstTraverser
 import com.github.rccccat.ideacallgraph.core.traversal.TraversalTarget
-import com.github.rccccat.ideacallgraph.core.visitor.CallTargetInfo
 import com.github.rccccat.ideacallgraph.core.visitor.ImplementationInfo
 import com.github.rccccat.ideacallgraph.core.visitor.JavaCallVisitor
 import com.github.rccccat.ideacallgraph.core.visitor.VisitorContext
@@ -17,11 +15,11 @@ import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraph
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
 import com.github.rccccat.ideacallgraph.ide.psi.PsiNodeFactory
 import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
+import com.github.rccccat.ideacallgraph.util.ExcludePatternMatcher
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.SmartPsiElementPointer
 import com.intellij.psi.util.PropertyUtilBase
@@ -35,13 +33,13 @@ class CallGraphBuilder(
     private val interfaceResolver: InterfaceResolver,
     private val myBatisAnalyzer: MyBatisAnalyzer,
     private val nodeFactory: PsiNodeFactory,
-    private val parameterUsageAnalyzer: ParameterUsageAnalyzer,
 ) {
   private val traverser = DepthFirstTraverser()
 
   /** Builds a call graph starting from the given element. */
   fun build(startElement: PsiElement): IdeCallGraph? {
     val settings = CallGraphProjectSettings.getInstance(project)
+    val excludePatternMatcher = ExcludePatternMatcher.fromPatterns(settings.excludePackagePatterns)
     val nodePointers = mutableMapOf<String, SmartPsiElementPointer<PsiElement>>()
     val elementToNode = mutableMapOf<String, Pair<PsiElement, CallGraphNodeData>>()
 
@@ -63,6 +61,7 @@ class CallGraphBuilder(
             typeResolver = typeResolver,
             interfaceResolver = interfaceResolver,
             springAnalyzer = springAnalyzer,
+            excludePatternMatcher = excludePatternMatcher,
         )
 
     // Traverse the graph
@@ -99,16 +98,10 @@ class CallGraphBuilder(
       val callTargets = visitor.findCallTargets(element, context)
 
       for (callTarget in callTargets) {
-        // Parameter usage filtering - skip calls where parameters are not effectively used
-        if (context.settings.filterByParameterUsage &&
-            !isCallRelevantByParameterUsage(callTarget)) {
-          continue
-        }
-
         val implementationTargets =
             callTarget.resolvedImplementations
                 ?.mapNotNull { impl ->
-                  if (shouldSkipTarget(impl.implementationMethod, context.settings)) {
+                  if (shouldSkipTarget(impl.implementationMethod, context)) {
                     null
                   } else {
                     convertImplementationToTarget(impl, elementToNode, nodePointers)
@@ -119,7 +112,7 @@ class CallGraphBuilder(
         val hasImplementations = implementationTargets.isNotEmpty()
         val keepTargetNode = shouldKeepTargetNode(callTarget.target, hasImplementations)
 
-        if (keepTargetNode && !shouldSkipTarget(callTarget.target, context.settings)) {
+        if (keepTargetNode && !shouldSkipTarget(callTarget.target, context)) {
           val targetIdeNode = nodeFactory.createIdeNode(callTarget.target)
           if (targetIdeNode != null) {
             val targetNode = targetIdeNode.data
@@ -203,33 +196,25 @@ class CallGraphBuilder(
 
   private fun shouldSkipTarget(
       element: PsiElement,
-      settings: CallGraphProjectSettings,
+      context: VisitorContext,
   ): Boolean {
-    val excludeRegexes =
-        settings.excludePackagePatterns.mapNotNull { pattern ->
-          runCatching { Regex(pattern) }.getOrNull()
-        }
-
     return when (element) {
       is PsiMethod -> {
-        val className = element.containingClass?.qualifiedName
-        val methodName = element.name
-
-        // Check exclude patterns
-        if (className != null && excludeRegexes.any { it.matches(className) }) {
+        if (context.excludePatternMatcher.matchesMethod(element)) {
           return true
         }
+        val methodName = element.name
 
         // Check method filtering
-        if (!settings.includeGettersSetters) {
+        if (!context.settings.includeGettersSetters) {
           if (PropertyUtilBase.isSimplePropertyGetter(element) ||
               PropertyUtilBase.isSimplePropertySetter(element)) {
             return true
           }
         }
 
-        if (!settings.includeToString && methodName == "toString") return true
-        if (!settings.includeHashCodeEquals &&
+        if (!context.settings.includeToString && methodName == "toString") return true
+        if (!context.settings.includeHashCodeEquals &&
             (methodName == "equals" || methodName == "hashCode")) {
           return true
         }
@@ -243,13 +228,4 @@ class CallGraphBuilder(
     }
   }
 
-  /**
-   * Checks if a call target is relevant based on parameter usage analysis. Returns true if the call
-   * should be included in the graph.
-   */
-  private fun isCallRelevantByParameterUsage(callTarget: CallTargetInfo): Boolean {
-    val method = callTarget.target as? PsiMethod ?: return true
-    val callExpression = callTarget.callExpression as? PsiMethodCallExpression ?: return true
-    return parameterUsageAnalyzer.isCallRelevant(callExpression, method)
-  }
 }

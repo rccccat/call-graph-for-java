@@ -6,15 +6,21 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.PsiShortNamesCache
+import com.intellij.psi.PsiSubstitutor
 
 internal fun hasMappingOnMethodOrSuper(method: PsiMethod): Boolean {
-  if (hasMappingIndicator(method)) return true
-  if (method.findSuperMethods(true).any { superMethod -> hasMappingIndicator(superMethod) }) {
+  val containingClass = method.containingClass ?: return false
+  val cache = SpringMethodCache.getInstance(method.project).mappingIndexCache()
+  val classKey = classCacheKey(containingClass)
+  val index = cache.computeIfAbsent(classKey) { buildMethodMappingIndex(containingClass) }
+
+  val methodSignature = methodSignatureKey(method)
+  if (index.classMappingSignatures.contains(methodSignature)) {
     return true
   }
-  return hasInterfaceMapping(method)
+
+  val interfaceKey = interfaceMethodKey(method.name, method.parameterList.parametersCount)
+  return index.interfaceMappingKeys.contains(interfaceKey)
 }
 
 private fun hasMappingNameFallback(method: PsiMethod): Boolean {
@@ -31,18 +37,6 @@ private fun hasMappingNameFallback(method: PsiMethod): Boolean {
       SpringAnnotations.mappingAnnotations.contains(simpleName) || simpleName.endsWith("Mapping")
     }
   }
-}
-
-private fun hasInterfaceMapping(method: PsiMethod): Boolean {
-  val containingClass = method.containingClass ?: return false
-  val paramCount = method.parameterList.parametersCount
-  val interfaceClasses = collectAllInterfaces(containingClass)
-  if (interfaceClasses.any { interfaceClass ->
-    hasInterfaceMethodMapping(interfaceClass, method.name, paramCount)
-  }) {
-    return true
-  }
-  return false
 }
 
 private fun collectAllInterfaces(psiClass: PsiClass): List<PsiClass> {
@@ -65,11 +59,10 @@ private fun collectAllInterfaces(psiClass: PsiClass): List<PsiClass> {
 
 private fun resolveReferencedInterfaces(psiClass: PsiClass): List<PsiClass> {
   val project = psiClass.project
-  val scope = GlobalSearchScope.allScope(project)
+  val scope = psiClass.resolveScope
   val javaPsiFacade = JavaPsiFacade.getInstance(project)
   val packageName =
       (psiClass.containingFile as? PsiJavaFile)?.packageName?.takeIf { it.isNotBlank() }
-  val shortNamesCache = PsiShortNamesCache.getInstance(project)
 
   return psiClass.implementsListTypes.mapNotNull { type ->
     type.resolve()
@@ -78,23 +71,61 @@ private fun resolveReferencedInterfaces(psiClass: PsiClass): List<PsiClass> {
           val qualifiedCandidate =
               if (name.contains(".")) name else packageName?.let { "$it.$name" } ?: name
           javaPsiFacade.findClass(qualifiedCandidate, scope)
-              ?: shortNamesCache.getClassesByName(name, scope).firstOrNull()
         }
-  }
-}
-
-private fun hasInterfaceMethodMapping(
-    interfaceClass: PsiClass,
-    name: String,
-    paramCount: Int,
-): Boolean {
-  return interfaceClass.findMethodsByName(name, true).any { interfaceMethod ->
-    interfaceMethod.parameterList.parametersCount == paramCount &&
-        hasMappingIndicator(interfaceMethod)
   }
 }
 
 private fun hasMappingIndicator(method: PsiMethod): Boolean {
   return hasAnyAnnotationOrMeta(method, SpringAnnotations.mappingAnnotations) ||
       hasMappingNameFallback(method)
+}
+
+private fun buildMethodMappingIndex(psiClass: PsiClass): MethodMappingIndex {
+  val classMappingSignatures = LinkedHashSet<String>()
+  for (current in collectClassHierarchy(psiClass)) {
+    for (method in current.methods) {
+      if (hasMappingIndicator(method)) {
+        classMappingSignatures.add(methodSignatureKey(method))
+      }
+    }
+  }
+
+  val interfaceMappingKeys = LinkedHashSet<String>()
+  for (interfaceClass in collectAllInterfaces(psiClass)) {
+    for (method in interfaceClass.methods) {
+      if (hasMappingIndicator(method)) {
+        interfaceMappingKeys.add(
+            interfaceMethodKey(method.name, method.parameterList.parametersCount),
+        )
+      }
+    }
+  }
+
+  return MethodMappingIndex(classMappingSignatures, interfaceMappingKeys)
+}
+
+private fun collectClassHierarchy(psiClass: PsiClass): List<PsiClass> {
+  val result = ArrayList<PsiClass>()
+  var current: PsiClass? = psiClass
+  while (current != null) {
+    result.add(current)
+    current = current.superClass
+  }
+  return result
+}
+
+private fun methodSignatureKey(method: PsiMethod): String =
+    method.getSignature(PsiSubstitutor.EMPTY).toString()
+
+private fun interfaceMethodKey(
+    name: String,
+    paramCount: Int,
+): String = "$name#$paramCount"
+
+private fun classCacheKey(psiClass: PsiClass): String {
+  val qualifiedName = psiClass.qualifiedName
+  if (qualifiedName != null) return qualifiedName
+  val filePath = psiClass.containingFile?.virtualFile?.path
+  val className = psiClass.name ?: "Anonymous"
+  return if (filePath != null) "$filePath#$className" else className
 }

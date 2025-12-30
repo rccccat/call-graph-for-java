@@ -3,6 +3,7 @@ package com.github.rccccat.ideacallgraph.framework.mybatis
 import com.github.rccccat.ideacallgraph.addMyBatisStubs
 import com.github.rccccat.ideacallgraph.addSpringCoreStubs
 import com.github.rccccat.ideacallgraph.api.model.CallGraphData
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.PsiDocumentManager
@@ -62,10 +63,17 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
 
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
+    val handleNode = graph.nodes.values.firstOrNull { it.name == "handle" }
+    val hasEdgeToFindById =
+        if (handleNode == null) {
+          false
+        } else {
+          graph.getCallTargets(handleNode.id).any { target -> target.name == "findById" }
+        }
 
     assertTrue(
         "Expected edge to findById",
-        graph.edges.any { edge -> graph.nodes[edge.toId]?.name == "findById" },
+        hasEdgeToFindById,
     )
   }
 
@@ -91,7 +99,7 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
                 .trimIndent(),
         )
 
-    val analyzer = MyBatisAnalyzer(project)
+    val analyzer = MyBatisAnalyzer(project, CallGraphCacheManager.getInstance(project))
     val methodBefore =
         PsiTreeUtil.findChildrenOfType(mapperFile, PsiMethod::class.java).first {
           it.name == "findById"
@@ -128,7 +136,6 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
         PsiTreeUtil.findChildrenOfType(updatedFile, PsiMethod::class.java).first {
           it.name == "findById"
         }
-    analyzer.resetCaches()
     val infoAfter = analyzer.analyzeMapperMethod(methodAfter)
     assertEquals("select id from users where id = #{id}", infoAfter.sqlStatement)
   }

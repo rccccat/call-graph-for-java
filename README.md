@@ -12,7 +12,7 @@ An IntelliJ IDEA plugin for generating and visualizing call graphs from Java cod
 - **MyBatis mappings browser**: Browse SQL mappings and jump to mapper/XML
 - **JSON export with code**: Pretty/compact JSON including each node's self code
 - **Navigation and context actions**: Double-click navigation, copy signatures, view method details
-- **Configurable analysis**: Depth limits, package filters, method filters, interface resolution, MyBatis XML scan
+- **Configurable analysis**: Depth limits, exclude patterns (package/class/method/signature), method filters, interface resolution, MyBatis XML scan
 - **Background tasks**: Progress indicators and indexing checks
 
 ## Architecture
@@ -36,9 +36,6 @@ com.github.rccccat.ideacallgraph/
 │   ├── resolver/           # Type and interface resolution
 │   │   ├── TypeResolver
 │   │   └── InterfaceResolver
-│   └── dataflow/           # Parameter usage and data flow analysis
-│       ├── ParameterUsageAnalyzer
-│       └── SliceDataFlowAnalyzer
 ├── framework/              # Framework-specific analyzers
 │   ├── spring/             # SpringAnalyzer + JavaSpringAnalyzer + SpringInjectionAnalyzer
 │   └── mybatis/            # MyBatisAnalyzer
@@ -128,7 +125,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 1. **Customize Analysis**:
    - Go to `Settings/Preferences > Tools > Call Graph`
    - Configure project/third-party depth limits
-   - Set package exclude patterns (regex) and method filters
+   - Set exclude patterns (regex) for package/class/method/signature and method filters
    - Control interface implementation resolution and traversal breadth
    - Enable full XML scanning for MyBatis (slower but more complete)
 

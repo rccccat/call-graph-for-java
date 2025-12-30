@@ -54,7 +54,6 @@ This is an IntelliJ IDEA plugin that generates and visualizes method call graphs
 - `visitor/CallVisitor` + `JavaCallVisitor` - PSI traversal
 - `traversal/GraphTraverser` + `DepthFirstTraverser` - Traversal strategy
 - `resolver/TypeResolver` + `InterfaceResolver` - Type resolution and interface dispatch
-- `dataflow/ParameterUsageAnalyzer` + `SliceDataFlowAnalyzer` - Parameter usage and data flow analysis
 
 **Framework Layer** (`framework/`):
 - `spring/SpringAnalyzer` - Unified Spring analysis facade (with `JavaSpringAnalyzer`, `SpringInjectionAnalyzer`)

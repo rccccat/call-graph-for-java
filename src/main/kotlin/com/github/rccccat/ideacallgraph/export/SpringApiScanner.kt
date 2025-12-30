@@ -1,17 +1,17 @@
 package com.github.rccccat.ideacallgraph.export
 
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.framework.spring.hasMappingOnMethodOrSuper
 import com.github.rccccat.ideacallgraph.util.SpringAnnotations
 import com.github.rccccat.ideacallgraph.util.findAnnotatedClasses
-import com.github.rccccat.ideacallgraph.util.hasAnyAnnotationOrMeta
 import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.AllClassesSearch
 
 /**
  * Scanner for finding all Spring API endpoints in the project. Scans @Controller/@RestController
@@ -19,7 +19,30 @@ import com.intellij.psi.search.searches.AllClassesSearch
  */
 class SpringApiScanner(
     private val project: Project,
+    private val cacheManager: CallGraphCacheManager,
 ) {
+  private val scanIndicator = ThreadLocal<ProgressIndicator?>()
+  private val controllerAnnotationClassesCache =
+      cacheManager.createCachedValue {
+        val javaPsiFacade = JavaPsiFacade.getInstance(project)
+        collectControllerAnnotationClasses(
+            javaPsiFacade,
+            GlobalSearchScope.projectScope(project),
+            resolveIndicator(),
+        )
+      }
+  private val controllerClassesCache =
+      cacheManager.createCachedValue {
+        val scope = GlobalSearchScope.projectScope(project)
+        collectControllerClasses(
+            controllerAnnotationClassesCache.value,
+            scope,
+            resolveIndicator(),
+        )
+      }
+  private val endpointsCache =
+      cacheManager.createCachedValue { scanAllEndpointsInternal(resolveIndicator()) }
+
   /**
    * Scans the project for all Spring API endpoint methods.
    *
@@ -27,43 +50,35 @@ class SpringApiScanner(
    * @return List of PsiMethod objects representing API endpoints
    */
   fun scanAllEndpoints(indicator: ProgressIndicator): List<PsiMethod> {
+    scanIndicator.set(indicator)
+    try {
+      val endpoints = endpointsCache.value
+      indicator.text = "Found ${endpoints.size} API endpoints"
+      indicator.fraction = 1.0
+      return endpoints
+    } finally {
+      scanIndicator.remove()
+    }
+  }
+
+  private fun resolveIndicator(): ProgressIndicator =
+      scanIndicator.get() ?: EmptyProgressIndicator()
+
+  private fun scanAllEndpointsInternal(indicator: ProgressIndicator): List<PsiMethod> {
     return ReadAction.compute<List<PsiMethod>, Exception> {
       val endpoints = mutableListOf<PsiMethod>()
-      val scope = GlobalSearchScope.projectScope(project)
-      val javaPsiFacade = JavaPsiFacade.getInstance(project)
-      val controllerClasses = LinkedHashSet<PsiClass>()
-
-      indicator.text = "Scanning Spring controllers..."
+      val controllerClasses = controllerClassesCache.value
+      indicator.text = "Scanning Spring controller methods..."
       indicator.isIndeterminate = false
 
-      val controllerAnnotationClasses =
-          collectControllerAnnotationClasses(
-              javaPsiFacade,
-              GlobalSearchScope.projectScope(project),
-              indicator,
-          )
-      for ((index, annotationClass) in controllerAnnotationClasses.withIndex()) {
+      for ((index, controllerClass) in controllerClasses.withIndex()) {
         indicator.checkCanceled()
         indicator.fraction =
-            if (controllerAnnotationClasses.isNotEmpty()) {
-              index.toDouble() / controllerAnnotationClasses.size * 0.6
+            if (controllerClasses.isNotEmpty()) {
+              0.6 + (index + 1).toDouble() / controllerClasses.size * 0.4
             } else {
-              0.0
+              0.6
             }
-
-        val annotationQualifiedName = annotationClass.qualifiedName ?: continue
-        val annotatedClasses = findAnnotatedClasses(javaPsiFacade, annotationQualifiedName, scope)
-        for (candidate in annotatedClasses) {
-          if (!candidate.isAnnotationType) {
-            controllerClasses.add(candidate)
-          }
-        }
-      }
-
-      controllerClasses.addAll(collectControllerClassesByMeta(scope))
-
-      for (controllerClass in controllerClasses) {
-        indicator.checkCanceled()
         extractEndpointsFromController(controllerClass, endpoints)
       }
 
@@ -116,9 +131,7 @@ class SpringApiScanner(
     while (queue.isNotEmpty()) {
       indicator.checkCanceled()
       val current = queue.removeFirst()
-      val qualifiedName = current.qualifiedName ?: continue
-
-      val annotatedClasses = findAnnotatedClasses(javaPsiFacade, qualifiedName, scope)
+      val annotatedClasses = findAnnotatedClasses(current, scope)
       for (candidate in annotatedClasses) {
         if (!candidate.isAnnotationType) continue
         if (result.add(candidate)) {
@@ -130,14 +143,28 @@ class SpringApiScanner(
     return result.toList()
   }
 
-  private fun collectControllerClassesByMeta(
+  private fun collectControllerClasses(
+      controllerAnnotationClasses: List<PsiClass>,
       scope: GlobalSearchScope,
+      indicator: ProgressIndicator,
   ): List<PsiClass> {
     val result = LinkedHashSet<PsiClass>()
-    AllClassesSearch.search(scope, project).forEach { psiClass ->
-      if (psiClass.isAnnotationType) return@forEach
-      if (hasAnyAnnotationOrMeta(psiClass, SpringAnnotations.controllerAnnotations)) {
-        result.add(psiClass)
+    indicator.text = "Scanning Spring controllers..."
+    indicator.isIndeterminate = false
+    for ((index, annotationClass) in controllerAnnotationClasses.withIndex()) {
+      indicator.checkCanceled()
+      indicator.fraction =
+          if (controllerAnnotationClasses.isNotEmpty()) {
+            index.toDouble() / controllerAnnotationClasses.size * 0.6
+          } else {
+            0.0
+          }
+
+      val annotatedClasses = findAnnotatedClasses(annotationClass, scope)
+      for (candidate in annotatedClasses) {
+        if (!candidate.isAnnotationType) {
+          result.add(candidate)
+        }
       }
     }
     return result.toList()

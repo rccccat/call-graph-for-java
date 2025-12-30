@@ -1,5 +1,6 @@
 package com.github.rccccat.ideacallgraph.settings
 
+import com.github.rccccat.ideacallgraph.util.ExcludePatternMatcher
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
@@ -28,7 +29,6 @@ class CallGraphConfigurable(
   private lateinit var includeHashCodeEqualsCheckBox: JBCheckBox
   private lateinit var resolveInterfaceImplementationsCheckBox: JBCheckBox
   private lateinit var mybatisScanAllXmlCheckBox: JBCheckBox
-  private lateinit var filterByParameterUsageCheckBox: JBCheckBox
 
   override fun getDisplayName(): String = "Call Graph"
 
@@ -94,17 +94,20 @@ class CallGraphConfigurable(
         )
     mainPanel!!.add(thirdPartyDepthField, constraints)
 
-    // Package Filter Section
+    // Exclude Filter Section
     constraints.gridx = 0
     constraints.gridy++
     constraints.gridwidth = 2
     constraints.insets = Insets(20, 0, 10, 0)
-    mainPanel!!.add(JBLabel("<html><b>Package filtering (regex patterns)</b></html>"), constraints)
+    mainPanel!!.add(JBLabel("<html><b>Exclude filtering (regex patterns)</b></html>"), constraints)
 
     constraints.gridy++
     constraints.insets = Insets(5, 20, 5, 0)
     mainPanel!!.add(
-        JBLabel("Exclude packages matching these patterns (one per line):"), constraints)
+        JBLabel(
+            "Exclude packages/classes/methods/signatures matching these patterns (one per line):"),
+        constraints,
+    )
 
     constraints.gridy++
     constraints.fill = GridBagConstraints.BOTH
@@ -185,21 +188,6 @@ class CallGraphConfigurable(
         )
     mainPanel!!.add(mybatisScanAllXmlCheckBox, constraints)
 
-    // Advanced Filtering Section
-    constraints.gridy++
-    constraints.gridwidth = 2
-    constraints.insets = Insets(20, 0, 10, 0)
-    mainPanel!!.add(JBLabel("<html><b>Advanced filtering (experimental)</b></html>"), constraints)
-
-    constraints.gridy++
-    constraints.insets = Insets(5, 20, 5, 0)
-    filterByParameterUsageCheckBox =
-        JBCheckBox(
-            "Filter calls where parameters are unused (slower, uses data flow analysis)",
-            projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage,
-        )
-    mainPanel!!.add(filterByParameterUsageCheckBox, constraints)
-
     // Help text
     constraints.gridy++
     constraints.gridwidth = 2
@@ -209,7 +197,8 @@ class CallGraphConfigurable(
         <html>
         <small>
         <b>Tips:</b><br/>
-        • Use Java regex patterns for package filtering (e.g., "java\\..*" matches all java packages)<br/>
+        • Patterns match package/class/method/signature; prefixes: pkg:, class:, method:, sig:<br/>
+        • Signature format: com.example.Foo#bar(java.lang.String,int)<br/>
         • Higher recursion depths provide more complete call graphs but may impact performance<br/>
         • Method filtering helps reduce noise in the call graph<br/>
         • Interface resolution is especially useful for Spring dependency injection patterns<br/>
@@ -253,9 +242,7 @@ class CallGraphConfigurable(
             (projectState.resolveInterfaceImplementations
                 ?: appSettings.resolveInterfaceImplementations) ||
         mybatisScanAllXmlCheckBox.isSelected !=
-            (projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml) ||
-        filterByParameterUsageCheckBox.isSelected !=
-            (projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage)
+            (projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml)
   }
 
   override fun apply() {
@@ -270,7 +257,6 @@ class CallGraphConfigurable(
       settings.setIncludeHashCodeEquals(null)
       settings.setResolveInterfaceImplementations(null)
       settings.setMybatisScanAllXml(null)
-      settings.setFilterByParameterUsage(null)
       return
     }
 
@@ -292,16 +278,15 @@ class CallGraphConfigurable(
     settings.setProjectMaxDepth(projectDepth)
     settings.setThirdPartyMaxDepth(thirdPartyDepth)
 
-    // Apply package patterns
+    // Apply exclude patterns
     val patterns = excludePatternsArea.text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
 
     // Validate regex patterns
     for (pattern in patterns) {
-      try {
-        Regex(pattern)
-      } catch (e: Exception) {
+      val error = ExcludePatternMatcher.validatePattern(pattern)
+      if (error != null) {
         Messages.showErrorDialog(
-            "Invalid regex pattern: $pattern\nError: ${e.message}", "Invalid Configuration")
+            "Invalid exclude pattern: $pattern\nError: $error", "Invalid Configuration")
         return
       }
     }
@@ -312,7 +297,6 @@ class CallGraphConfigurable(
     settings.setIncludeHashCodeEquals(includeHashCodeEqualsCheckBox.isSelected)
     settings.setResolveInterfaceImplementations(resolveInterfaceImplementationsCheckBox.isSelected)
     settings.setMybatisScanAllXml(mybatisScanAllXmlCheckBox.isSelected)
-    settings.setFilterByParameterUsage(filterByParameterUsageCheckBox.isSelected)
   }
 
   override fun reset() {
@@ -337,8 +321,6 @@ class CallGraphConfigurable(
         projectState.resolveInterfaceImplementations ?: appSettings.resolveInterfaceImplementations
     mybatisScanAllXmlCheckBox.isSelected =
         projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml
-    filterByParameterUsageCheckBox.isSelected =
-        projectState.filterByParameterUsage ?: appSettings.filterByParameterUsage
     updateFieldsEnabled()
   }
 
@@ -350,8 +332,7 @@ class CallGraphConfigurable(
         state.includeToString == null &&
         state.includeHashCodeEquals == null &&
         state.resolveInterfaceImplementations == null &&
-        state.mybatisScanAllXml == null &&
-        state.filterByParameterUsage == null
+        state.mybatisScanAllXml == null
   }
 
   private fun updateFieldsEnabled() {
@@ -364,6 +345,5 @@ class CallGraphConfigurable(
     includeHashCodeEqualsCheckBox.isEnabled = enabled
     resolveInterfaceImplementationsCheckBox.isEnabled = enabled
     mybatisScanAllXmlCheckBox.isEnabled = enabled
-    filterByParameterUsageCheckBox.isEnabled = enabled
   }
 }

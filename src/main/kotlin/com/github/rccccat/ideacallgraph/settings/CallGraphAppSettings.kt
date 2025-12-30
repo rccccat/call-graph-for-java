@@ -25,14 +25,13 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
               "kotlinx\\..*",
               "org\\.springframework\\..*",
               "org\\.apache\\..*",
+              "pkg:.*exception.*",
           ),
       var includeGettersSetters: Boolean = false,
       var includeToString: Boolean = false,
       var includeHashCodeEquals: Boolean = false,
       var resolveInterfaceImplementations: Boolean = true,
       var mybatisScanAllXml: Boolean = false,
-      // Parameter usage filtering (experimental, disabled by default for performance)
-      var filterByParameterUsage: Boolean = false,
       // UI defaults
       var treeMaxDisplayDepth: Int = 5,
       var treeMaxChildrenPerNode: Int = 20,
@@ -71,9 +70,6 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
 
   val mybatisScanAllXml: Boolean
     get() = myState.mybatisScanAllXml
-
-  val filterByParameterUsage: Boolean
-    get() = myState.filterByParameterUsage
 
   val treeMaxDisplayDepth: Int
     get() = myState.treeMaxDisplayDepth
@@ -115,10 +111,6 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
 
   fun setMybatisScanAllXml(value: Boolean) {
     myState.mybatisScanAllXml = value
-  }
-
-  fun setFilterByParameterUsage(value: Boolean) {
-    myState.filterByParameterUsage = value
   }
 
   companion object {

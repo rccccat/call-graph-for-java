@@ -1,5 +1,6 @@
 package com.github.rccccat.ideacallgraph.framework.mybatis
 
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.api.model.CallGraphNodeData
 import com.github.rccccat.ideacallgraph.api.model.NodeType
 import com.github.rccccat.ideacallgraph.api.model.SqlType
@@ -23,16 +24,20 @@ import java.util.concurrent.ConcurrentHashMap
 /** Analyzer for MyBatis mapper methods and SQL mappings. */
 class MyBatisAnalyzer(
     private val project: Project,
+    private val cacheManager: CallGraphCacheManager,
 ) {
   private val log = Logger.getInstance(MyBatisAnalyzer::class.java)
-  // Method analysis cache (cleared on explicit reset)
-  private val mapperMethodCache = ConcurrentHashMap<String, MyBatisMethodInfo>()
+  private val mapperMethodCache =
+      cacheManager.createCachedValue { ConcurrentHashMap<String, MyBatisMethodInfo>() }
+  private val xmlIndexState =
+      cacheManager.createCachedValue { XmlIndexState(ConcurrentHashMap(), Any()) }
 
-  // XML SQL index: namespace#methodName -> XmlSqlEntry (rebuilt only on explicit reset)
-  private val xmlSqlIndex = ConcurrentHashMap<String, XmlSqlEntry>()
-  @Volatile private var xmlIndexBuilt = false
-
-  private val cacheLock = Any()
+  private data class XmlIndexState(
+      val index: ConcurrentHashMap<String, XmlSqlEntry>,
+      val lock: Any,
+  ) {
+    @Volatile var built: Boolean = false
+  }
 
   private data class XmlSqlEntry(
       val sqlType: SqlType,
@@ -45,7 +50,8 @@ class MyBatisAnalyzer(
   fun analyzeMapperMethod(method: PsiMethod): MyBatisMethodInfo {
     return ReadAction.compute<MyBatisMethodInfo, Exception> {
       val cacheKey = buildMethodCacheKey(method)
-      mapperMethodCache[cacheKey]?.let {
+      val cache = mapperMethodCache.value
+      cache[cacheKey]?.let {
         return@compute it
       }
 
@@ -59,7 +65,7 @@ class MyBatisAnalyzer(
                 sqlStatement = annotationSql.sql,
                 isAnnotationBased = true,
             )
-        mapperMethodCache[cacheKey] = result
+        cache[cacheKey] = result
         return@compute result
       }
 
@@ -73,13 +79,13 @@ class MyBatisAnalyzer(
                 sqlStatement = xmlSql.sql,
                 isAnnotationBased = false,
             )
-        mapperMethodCache[cacheKey] = result
+        cache[cacheKey] = result
         return@compute result
       }
 
       // 3. Not a mapper method
       val result = MyBatisMethodInfo(isMapperMethod = false)
-      mapperMethodCache[cacheKey] = result
+      cache[cacheKey] = result
       result
     }
   }
@@ -137,13 +143,14 @@ class MyBatisAnalyzer(
     buildXmlSqlIndex()
 
     val key = "$namespace#${method.name}"
-    return xmlSqlIndex[key]
+    return xmlIndexState.value.index[key]
   }
 
   private fun buildXmlSqlIndex() {
-    if (xmlIndexBuilt) return
-    synchronized(cacheLock) {
-      if (xmlIndexBuilt) return
+    val state = xmlIndexState.value
+    if (state.built) return
+    synchronized(state.lock) {
+      if (state.built) return
 
       val scope = GlobalSearchScope.projectScope(project)
       val xmlFiles =
@@ -153,17 +160,20 @@ class MyBatisAnalyzer(
 
       for (file in xmlFiles) {
         try {
-          indexMapperXml(file)
+          indexMapperXml(file, state.index)
         } catch (e: Exception) {
           log.warn("Failed to index XML file: ${file.path}", e)
         }
       }
 
-      xmlIndexBuilt = true
+      state.built = true
     }
   }
 
-  private fun indexMapperXml(file: VirtualFile): Boolean {
+  private fun indexMapperXml(
+      file: VirtualFile,
+      index: ConcurrentHashMap<String, XmlSqlEntry>,
+  ): Boolean {
     return ReadAction.compute<Boolean, Exception> {
       val psiFile =
           PsiManager.getInstance(project).findFile(file) as? XmlFile ?: return@compute false
@@ -189,22 +199,10 @@ class MyBatisAnalyzer(
         val sql = tag.value.text.trim()
 
         val key = "$namespace#$id"
-        xmlSqlIndex[key] = XmlSqlEntry(sqlType, sql, file, tag.name)
+        index[key] = XmlSqlEntry(sqlType, sql, file, tag.name)
       }
       true
     }
-  }
-
-  private fun invalidateXmlIndex() {
-    synchronized(cacheLock) {
-      xmlSqlIndex.clear()
-      xmlIndexBuilt = false
-      mapperMethodCache.clear()
-    }
-  }
-
-  fun resetCaches() {
-    invalidateXmlIndex()
   }
 
   private fun findXmlElementForMethod(method: PsiMethod): PsiElement? {
@@ -214,7 +212,7 @@ class MyBatisAnalyzer(
     buildXmlSqlIndex()
 
     val key = "$namespace#${method.name}"
-    val entry = xmlSqlIndex[key] ?: return null
+    val entry = xmlIndexState.value.index[key] ?: return null
 
     return ReadAction.compute<PsiElement?, Exception> {
       val psiFile =

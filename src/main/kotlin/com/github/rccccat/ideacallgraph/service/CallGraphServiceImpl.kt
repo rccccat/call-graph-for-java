@@ -2,8 +2,8 @@ package com.github.rccccat.ideacallgraph.service
 
 import com.github.rccccat.ideacallgraph.api.CallGraphService
 import com.github.rccccat.ideacallgraph.api.model.CallGraphData
+import com.github.rccccat.ideacallgraph.cache.CallGraphCacheManager
 import com.github.rccccat.ideacallgraph.core.CallGraphBuilder
-import com.github.rccccat.ideacallgraph.core.dataflow.ParameterUsageAnalyzer
 import com.github.rccccat.ideacallgraph.core.resolver.InterfaceResolver
 import com.github.rccccat.ideacallgraph.core.resolver.TypeResolver
 import com.github.rccccat.ideacallgraph.core.visitor.JavaCallVisitor
@@ -23,12 +23,12 @@ class CallGraphServiceImpl(
     private val project: Project,
 ) : CallGraphService {
 
+  private val cacheManager = CallGraphCacheManager.getInstance(project)
   private val springAnalyzer = SpringAnalyzer()
   private val visitor = JavaCallVisitor()
-  private val myBatisAnalyzer = MyBatisAnalyzer(project)
+  private val myBatisAnalyzer = MyBatisAnalyzer(project, cacheManager)
   private val typeResolver = TypeResolver(project)
-  private val interfaceResolver = InterfaceResolver(project, springAnalyzer)
-  private val parameterUsageAnalyzer = ParameterUsageAnalyzer(project)
+  private val interfaceResolver = InterfaceResolver(project, springAnalyzer, cacheManager)
   private val nodeFactory = PsiNodeFactory(project, springAnalyzer, myBatisAnalyzer)
   private val jsonExporter = JsonExporter()
   private val codeExtractor = CodeExtractor()
@@ -43,7 +43,6 @@ class CallGraphServiceImpl(
             interfaceResolver = interfaceResolver,
             myBatisAnalyzer = myBatisAnalyzer,
             nodeFactory = nodeFactory,
-            parameterUsageAnalyzer = parameterUsageAnalyzer,
         )
     return builder.build(startElement)
   }
@@ -63,9 +62,7 @@ class CallGraphServiceImpl(
   }
 
   fun resetCaches() {
-    myBatisAnalyzer.resetCaches()
-    interfaceResolver.resetCaches()
-    parameterUsageAnalyzer.clearCache()
+    cacheManager.invalidateAll()
   }
 
   fun getMyBatisAnalyzer(): MyBatisAnalyzer = myBatisAnalyzer

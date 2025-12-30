@@ -1,7 +1,6 @@
 package com.github.rccccat.ideacallgraph.core.traversal
 
 import com.github.rccccat.ideacallgraph.api.model.CallGraphData
-import com.github.rccccat.ideacallgraph.api.model.CallGraphEdgeData
 import com.github.rccccat.ideacallgraph.api.model.CallGraphNodeData
 import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.intellij.openapi.progress.ProgressManager
@@ -15,13 +14,13 @@ class DepthFirstTraverser {
       settings: CallGraphProjectSettings,
   ): CallGraphData {
     val nodes = mutableMapOf(rootNode.id to rootNode)
-    val edges = mutableListOf<CallGraphEdgeData>()
+    val outgoingByFromId = mutableMapOf<String, MutableList<String>>()
     val visitedDepth = mutableMapOf<String, Int>()
 
     traverseRecursive(
         currentNode = rootNode,
         nodes = nodes,
-        edges = edges,
+        outgoingByFromId = outgoingByFromId,
         visitedDepth = visitedDepth,
         remainingDepth = settings.projectMaxDepth,
         isProjectCode = true,
@@ -32,14 +31,14 @@ class DepthFirstTraverser {
     return CallGraphData(
         rootNodeId = rootNode.id,
         nodes = nodes.toMap(),
-        edges = edges.toList(),
+        outgoingByFromId = outgoingByFromId.mapValues { it.value.toList() },
     )
   }
 
   private fun traverseRecursive(
       currentNode: CallGraphNodeData,
       nodes: MutableMap<String, CallGraphNodeData>,
-      edges: MutableList<CallGraphEdgeData>,
+      outgoingByFromId: MutableMap<String, MutableList<String>>,
       visitedDepth: MutableMap<String, Int>,
       remainingDepth: Int,
       isProjectCode: Boolean,
@@ -62,14 +61,14 @@ class DepthFirstTraverser {
           fromId = currentNode.id,
           target = target,
           nodes = nodes,
-          edges = edges,
+          outgoingByFromId = outgoingByFromId,
       )
 
       // Continue traversal for the target
       traverseIfNeeded(
           targetNode = target.node,
           nodes = nodes,
-          edges = edges,
+          outgoingByFromId = outgoingByFromId,
           visitedDepth = visitedDepth,
           remainingDepth = remainingDepth,
           currentIsProjectCode = isProjectCode,
@@ -83,20 +82,16 @@ class DepthFirstTraverser {
       fromId: String,
       target: TraversalTarget,
       nodes: MutableMap<String, CallGraphNodeData>,
-      edges: MutableList<CallGraphEdgeData>,
+      outgoingByFromId: MutableMap<String, MutableList<String>>,
   ) {
     nodes[target.node.id] = target.node
-    edges.add(
-        CallGraphEdgeData(
-            fromId = fromId,
-            toId = target.node.id,
-        ))
+    outgoingByFromId.getOrPut(fromId) { mutableListOf() }.add(target.node.id)
   }
 
   private fun traverseIfNeeded(
       targetNode: CallGraphNodeData,
       nodes: MutableMap<String, CallGraphNodeData>,
-      edges: MutableList<CallGraphEdgeData>,
+      outgoingByFromId: MutableMap<String, MutableList<String>>,
       visitedDepth: MutableMap<String, Int>,
       remainingDepth: Int,
       currentIsProjectCode: Boolean,
@@ -115,7 +110,7 @@ class DepthFirstTraverser {
       traverseRecursive(
           currentNode = targetNode,
           nodes = nodes,
-          edges = edges,
+          outgoingByFromId = outgoingByFromId,
           visitedDepth = visitedDepth,
           remainingDepth = nextDepth,
           isProjectCode = targetNode.isProjectCode,

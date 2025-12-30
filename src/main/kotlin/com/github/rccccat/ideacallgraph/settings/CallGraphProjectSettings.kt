@@ -30,8 +30,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
       var resolveInterfaceImplementations: Boolean? = null,
       // MyBatis settings - null means use app defaults
       var mybatisScanAllXml: Boolean? = null,
-      // Parameter usage filtering - null means use app defaults
-      var filterByParameterUsage: Boolean? = null,
       // UI settings - null means use app defaults
       var treeMaxDisplayDepth: Int? = null,
       var treeMaxChildrenPerNode: Int? = null,
@@ -79,11 +77,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
   val mybatisScanAllXml: Boolean
     get() = myState.mybatisScanAllXml ?: CallGraphAppSettings.getInstance().mybatisScanAllXml
 
-  // Parameter usage filtering
-  val filterByParameterUsage: Boolean
-    get() =
-        myState.filterByParameterUsage ?: CallGraphAppSettings.getInstance().filterByParameterUsage
-
   // UI settings with fallback to app defaults
   val treeMaxDisplayDepth: Int
     get() = myState.treeMaxDisplayDepth ?: CallGraphAppSettings.getInstance().treeMaxDisplayDepth
@@ -126,10 +119,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
 
   fun setMybatisScanAllXml(value: Boolean?) {
     myState.mybatisScanAllXml = value
-  }
-
-  fun setFilterByParameterUsage(value: Boolean?) {
-    myState.filterByParameterUsage = value
   }
 
   companion object {

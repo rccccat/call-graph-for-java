@@ -63,7 +63,6 @@ class GenerateCallGraphAction : AnAction("Generate Call Graph") {
                 indicator.fraction = 0.2
 
                 val service = CallGraphServiceImpl.getInstance(project)
-                service.resetCaches()
                 val callGraph = service.buildCallGraph(targetElement)
 
                 indicator.fraction = 0.8

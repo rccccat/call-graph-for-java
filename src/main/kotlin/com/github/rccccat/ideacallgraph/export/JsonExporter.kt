@@ -65,8 +65,7 @@ class JsonExporter {
       if (!visited.add(nodeId)) continue
 
       val node = callGraph.nodes[nodeId] ?: continue
-      val callTargets = callGraph.getCallTargets(nodeId).sortedBy { it.id }
-      val callTargetIds = callTargets.map { it.id }
+      val callTargetIds = callGraph.getCallTargetIds(nodeId)
 
       nodes[nodeId] =
           CallGraphJsonNode(
@@ -77,9 +76,9 @@ class JsonExporter {
               callTargets = callTargetIds,
           )
 
-      callTargets.forEach { callTarget ->
-        if (!visited.contains(callTarget.id)) {
-          queue.add(callTarget.id)
+      callTargetIds.forEach { targetId ->
+        if (!visited.contains(targetId)) {
+          queue.add(targetId)
         }
       }
     }

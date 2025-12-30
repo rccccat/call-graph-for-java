@@ -63,7 +63,11 @@ class MyBatisMapperScanner(
       indicator.fraction =
           0.5 + index.toDouble() / MyBatisAnnotations.mapperAnnotationQualifiedNames.size * 0.3
 
-      val annotatedClasses = findAnnotatedClasses(javaPsiFacade, annotationQualifiedName, scope)
+      val annotationClass =
+          ReadAction.compute<PsiClass?, Exception> {
+            javaPsiFacade.findClass(annotationQualifiedName, GlobalSearchScope.allScope(project))
+          } ?: continue
+      val annotatedClasses = findAnnotatedClasses(annotationClass, scope)
       mapperClasses.addAll(annotatedClasses)
     }
 

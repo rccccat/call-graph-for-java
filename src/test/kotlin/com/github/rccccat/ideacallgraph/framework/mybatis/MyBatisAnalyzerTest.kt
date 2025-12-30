@@ -73,7 +73,7 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
   // fun testAnnotationSqlCreatesSqlNode() { ... }
   // fun testXmlSqlCreatesSqlNode() { ... }
 
-  fun testCacheInvalidatesOnPsiChange() {
+  fun testCacheResetsAfterPsiChange() {
     val mapperFile =
         myFixture.addFileToProject(
             "src/demo/mapper/UserMapper.java",
@@ -128,6 +128,7 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
         PsiTreeUtil.findChildrenOfType(updatedFile, PsiMethod::class.java).first {
           it.name == "findById"
         }
+    analyzer.resetCaches()
     val infoAfter = analyzer.analyzeMapperMethod(methodAfter)
     assertEquals("select id from users where id = #{id}", infoAfter.sqlStatement)
   }
@@ -137,6 +138,7 @@ class MyBatisAnalyzerTest : BasePlatformTestCase() {
 
   private fun buildGraph(method: PsiMethod): CallGraphData {
     val service = CallGraphServiceImpl.getInstance(project)
+    service.resetCaches()
     val graph = service.buildCallGraph(method) ?: error("Call graph build failed")
     return graph.data
   }

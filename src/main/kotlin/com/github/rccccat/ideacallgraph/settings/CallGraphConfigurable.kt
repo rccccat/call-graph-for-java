@@ -27,7 +27,6 @@ class CallGraphConfigurable(
   private lateinit var includeToStringCheckBox: JBCheckBox
   private lateinit var includeHashCodeEqualsCheckBox: JBCheckBox
   private lateinit var resolveInterfaceImplementationsCheckBox: JBCheckBox
-  private lateinit var traverseAllImplementationsCheckBox: JBCheckBox
   private lateinit var mybatisScanAllXmlCheckBox: JBCheckBox
   private lateinit var filterByParameterUsageCheckBox: JBCheckBox
 
@@ -171,15 +170,6 @@ class CallGraphConfigurable(
         )
     mainPanel!!.add(resolveInterfaceImplementationsCheckBox, constraints)
 
-    // Traverse All Implementations
-    constraints.gridy++
-    traverseAllImplementationsCheckBox =
-        JBCheckBox(
-            "Traverse all implementations (otherwise prioritize Spring components)",
-            projectState.traverseAllImplementations ?: appSettings.traverseAllImplementations,
-        )
-    mainPanel!!.add(traverseAllImplementationsCheckBox, constraints)
-
     // MyBatis Section
     constraints.gridy++
     constraints.gridwidth = 2
@@ -223,7 +213,6 @@ class CallGraphConfigurable(
         • Higher recursion depths provide more complete call graphs but may impact performance<br/>
         • Method filtering helps reduce noise in the call graph<br/>
         • Interface resolution is especially useful for Spring dependency injection patterns<br/>
-        • Enable "Traverse all implementations" to see all possible call paths (may increase graph complexity)<br/>
         • Use application defaults to clear project-specific overrides
         </small>
         </html>
@@ -263,8 +252,6 @@ class CallGraphConfigurable(
         resolveInterfaceImplementationsCheckBox.isSelected !=
             (projectState.resolveInterfaceImplementations
                 ?: appSettings.resolveInterfaceImplementations) ||
-        traverseAllImplementationsCheckBox.isSelected !=
-            (projectState.traverseAllImplementations ?: appSettings.traverseAllImplementations) ||
         mybatisScanAllXmlCheckBox.isSelected !=
             (projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml) ||
         filterByParameterUsageCheckBox.isSelected !=
@@ -282,7 +269,6 @@ class CallGraphConfigurable(
       settings.setIncludeToString(null)
       settings.setIncludeHashCodeEquals(null)
       settings.setResolveInterfaceImplementations(null)
-      settings.setTraverseAllImplementations(null)
       settings.setMybatisScanAllXml(null)
       settings.setFilterByParameterUsage(null)
       return
@@ -325,7 +311,6 @@ class CallGraphConfigurable(
     settings.setIncludeToString(includeToStringCheckBox.isSelected)
     settings.setIncludeHashCodeEquals(includeHashCodeEqualsCheckBox.isSelected)
     settings.setResolveInterfaceImplementations(resolveInterfaceImplementationsCheckBox.isSelected)
-    settings.setTraverseAllImplementations(traverseAllImplementationsCheckBox.isSelected)
     settings.setMybatisScanAllXml(mybatisScanAllXmlCheckBox.isSelected)
     settings.setFilterByParameterUsage(filterByParameterUsageCheckBox.isSelected)
   }
@@ -350,8 +335,6 @@ class CallGraphConfigurable(
         projectState.includeHashCodeEquals ?: appSettings.includeHashCodeEquals
     resolveInterfaceImplementationsCheckBox.isSelected =
         projectState.resolveInterfaceImplementations ?: appSettings.resolveInterfaceImplementations
-    traverseAllImplementationsCheckBox.isSelected =
-        projectState.traverseAllImplementations ?: appSettings.traverseAllImplementations
     mybatisScanAllXmlCheckBox.isSelected =
         projectState.mybatisScanAllXml ?: appSettings.mybatisScanAllXml
     filterByParameterUsageCheckBox.isSelected =
@@ -367,7 +350,6 @@ class CallGraphConfigurable(
         state.includeToString == null &&
         state.includeHashCodeEquals == null &&
         state.resolveInterfaceImplementations == null &&
-        state.traverseAllImplementations == null &&
         state.mybatisScanAllXml == null &&
         state.filterByParameterUsage == null
   }
@@ -381,7 +363,6 @@ class CallGraphConfigurable(
     includeToStringCheckBox.isEnabled = enabled
     includeHashCodeEqualsCheckBox.isEnabled = enabled
     resolveInterfaceImplementationsCheckBox.isEnabled = enabled
-    traverseAllImplementationsCheckBox.isEnabled = enabled
     mybatisScanAllXmlCheckBox.isEnabled = enabled
     filterByParameterUsageCheckBox.isEnabled = enabled
   }

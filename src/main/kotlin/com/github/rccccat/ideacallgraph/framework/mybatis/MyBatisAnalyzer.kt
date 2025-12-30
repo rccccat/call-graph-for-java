@@ -9,9 +9,6 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.openapi.vfs.newvfs.BulkFileListener
-import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
@@ -20,7 +17,6 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.SmartPointerManager
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.xml.XmlFile
 import java.util.concurrent.ConcurrentHashMap
 
@@ -29,11 +25,10 @@ class MyBatisAnalyzer(
     private val project: Project,
 ) {
   private val log = Logger.getInstance(MyBatisAnalyzer::class.java)
-  // Method analysis cache (cleared on any PSI change for annotation-based SQL)
+  // Method analysis cache (cleared on explicit reset)
   private val mapperMethodCache = ConcurrentHashMap<String, MyBatisMethodInfo>()
-  @Volatile private var lastModificationCount = -1L
 
-  // XML SQL index: namespace#methodName -> XmlSqlEntry (only rebuilt on XML changes)
+  // XML SQL index: namespace#methodName -> XmlSqlEntry (rebuilt only on explicit reset)
   private val xmlSqlIndex = ConcurrentHashMap<String, XmlSqlEntry>()
   @Volatile private var xmlIndexBuilt = false
 
@@ -46,31 +41,9 @@ class MyBatisAnalyzer(
       val tagName: String,
   )
 
-  init {
-    // Listen for XML file changes to invalidate index
-    project.messageBus
-        .connect()
-        .subscribe(
-            VirtualFileManager.VFS_CHANGES,
-            object : BulkFileListener {
-              override fun after(events: List<VFileEvent>) {
-                for (event in events) {
-                  val file = event.file ?: continue
-                  if (file.extension == "xml") {
-                    invalidateXmlIndex()
-                    break
-                  }
-                }
-              }
-            },
-        )
-  }
-
   /** Analyzes a method to determine whether it is a MyBatis mapper method. */
   fun analyzeMapperMethod(method: PsiMethod): MyBatisMethodInfo {
     return ReadAction.compute<MyBatisMethodInfo, Exception> {
-      clearMethodCacheIfNeeded()
-
       val cacheKey = buildMethodCacheKey(method)
       mapperMethodCache[cacheKey]?.let {
         return@compute it
@@ -172,7 +145,7 @@ class MyBatisAnalyzer(
     synchronized(cacheLock) {
       if (xmlIndexBuilt) return
 
-      val scope = GlobalSearchScope.allScope(project)
+      val scope = GlobalSearchScope.projectScope(project)
       val xmlFiles =
           ReadAction.compute<Collection<VirtualFile>, Exception> {
             FilenameIndex.getAllFilesByExt(project, "xml", scope)
@@ -230,15 +203,8 @@ class MyBatisAnalyzer(
     }
   }
 
-  private fun clearMethodCacheIfNeeded() {
-    val currentCount = PsiModificationTracker.getInstance(project).modificationCount
-    if (currentCount == lastModificationCount) return
-
-    synchronized(cacheLock) {
-      if (currentCount == lastModificationCount) return
-      mapperMethodCache.clear()
-      lastModificationCount = currentCount
-    }
+  fun resetCaches() {
+    invalidateXmlIndex()
   }
 
   private fun findXmlElementForMethod(method: PsiMethod): PsiElement? {

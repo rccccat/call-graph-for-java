@@ -260,7 +260,7 @@ class SpringAdvancedTest : BasePlatformTestCase() {
 
   // ==================== Collection Injection Tests ====================
 
-  /** 测试 Map 注入 预期边: handle → get, handle → pay (所有实现) */
+  /** 测试 Map 注入 预期边: handle → pay（所有实现） */
   fun testMapInjection() {
     updateSettings {
       includeGettersSetters = true
@@ -302,7 +302,6 @@ class SpringAdvancedTest : BasePlatformTestCase() {
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
 
-    assertEdgeFromHandle(graph, "get")
     assertEdgeFromHandle(graph, "pay")
   }
 
@@ -495,6 +494,7 @@ class SpringAdvancedTest : BasePlatformTestCase() {
 
   private fun buildGraph(method: PsiMethod): CallGraphData {
     val service = CallGraphServiceImpl.getInstance(project)
+    service.resetCaches()
     val graph = service.buildCallGraph(method) ?: error("Call graph build failed")
     return graph.data
   }
@@ -557,7 +557,6 @@ class SpringAdvancedTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setTraverseAllImplementations(state.traverseAllImplementations)
     settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 

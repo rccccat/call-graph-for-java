@@ -512,6 +512,7 @@ class ParameterUsageFilterTest : BasePlatformTestCase() {
 
   private fun buildGraph(method: PsiMethod): CallGraphData {
     val service = CallGraphServiceImpl.getInstance(project)
+    service.resetCaches()
     val graph = service.buildCallGraph(method) ?: error("Call graph build failed")
     return graph.data
   }
@@ -572,7 +573,6 @@ class ParameterUsageFilterTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setTraverseAllImplementations(state.traverseAllImplementations)
     settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 

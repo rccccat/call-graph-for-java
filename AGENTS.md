@@ -1,4 +1,4 @@
 - **始终用中文与我交流**
 - 不需要考虑兼容性，永远执行破坏性变更，**不要编写向后兼容代码**
-- 本插件只支持 K2 Mode 的 IDEMyPluginTest.kt
+- 不限制 K2 Mode，也不限定特定测试文件
 - 禁止使用 wildcard import

@@ -1,9 +1,14 @@
 package com.github.rccccat.ideacallgraph.core.resolver
 
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiArrayType
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiType
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.PsiShortNamesCache
 
 /** Resolver for PSI types and classes. */
 class TypeResolver(
@@ -122,10 +127,7 @@ class TypeResolver(
       return it
     }
 
-    // 5. Fallback to short name cache (last resort)
-    return PsiShortNamesCache.getInstance(project)
-        .getClassesByName(qualifiedName, scope)
-        .firstOrNull()
+    return null
   }
 
   private fun extractTypeArgumentFromText(

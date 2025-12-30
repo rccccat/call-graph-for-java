@@ -5,6 +5,7 @@ import com.github.rccccat.ideacallgraph.export.MyBatisMapperScanner
 import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
 import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
+import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeNavigator
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeText
 import com.intellij.notification.NotificationGroupManager
@@ -43,7 +44,8 @@ class MyBatisMappingsToolWindowContent(
   private val list = JBList(listModel)
   private val emptyLabel = JLabel("Click Refresh to scan MyBatis mappers")
   private val scrollPane = JBScrollPane(list)
-  private val myBatisAnalyzer = MyBatisAnalyzer(project)
+  private val service = CallGraphServiceImpl.getInstance(project)
+  private val myBatisAnalyzer: MyBatisAnalyzer = service.getMyBatisAnalyzer()
   private val searchField = SearchTextField()
   private var allNodes: List<IdeCallGraphNode> = emptyList()
 
@@ -113,6 +115,7 @@ class MyBatisMappingsToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "Scanning MyBatis mappers", true) {
               override fun run(indicator: ProgressIndicator) {
+                service.resetCaches()
                 val settings = CallGraphProjectSettings.getInstance(project)
                 val scanner = MyBatisMapperScanner(project, settings.mybatisScanAllXml)
                 val nodes =

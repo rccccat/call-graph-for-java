@@ -1,10 +1,7 @@
 package com.github.rccccat.ideacallgraph.toolWindow
 
 import com.github.rccccat.ideacallgraph.export.SpringApiScanner
-import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
-import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
-import com.github.rccccat.ideacallgraph.ide.psi.PsiNodeFactory
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeNavigator
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeText
@@ -52,9 +49,7 @@ class SpringApisToolWindowContent(
   private val emptyLabel = JLabel("Click Refresh to scan Spring API endpoints")
   private val scrollPane = JBScrollPane(list)
   private val service = CallGraphServiceImpl.getInstance(project)
-  private val springAnalyzer = SpringAnalyzer()
-  private val myBatisAnalyzer = MyBatisAnalyzer(project)
-  private val nodeFactory = PsiNodeFactory(project, springAnalyzer, myBatisAnalyzer)
+  private val nodeFactory = service.getNodeFactory()
   private val searchField = SearchTextField()
   private var allNodes: List<IdeCallGraphNode> = emptyList()
 
@@ -128,6 +123,7 @@ class SpringApisToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "Scanning Spring APIs", true) {
               override fun run(indicator: ProgressIndicator) {
+                service.resetCaches()
                 val scanner = SpringApiScanner(project)
                 val nodes =
                     try {
@@ -256,6 +252,7 @@ class SpringApisToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "Exporting Spring APIs", true) {
               override fun run(indicator: ProgressIndicator) {
+                service.resetCaches()
                 var successCount = 0
                 var failCount = 0
 

@@ -28,7 +28,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
       var includeHashCodeEquals: Boolean? = null,
       // Interface resolution - null means use app defaults
       var resolveInterfaceImplementations: Boolean? = null,
-      var traverseAllImplementations: Boolean? = null,
       // MyBatis settings - null means use app defaults
       var mybatisScanAllXml: Boolean? = null,
       // Parameter usage filtering - null means use app defaults
@@ -75,11 +74,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
     get() =
         myState.resolveInterfaceImplementations
             ?: CallGraphAppSettings.getInstance().resolveInterfaceImplementations
-
-  val traverseAllImplementations: Boolean
-    get() =
-        myState.traverseAllImplementations
-            ?: CallGraphAppSettings.getInstance().traverseAllImplementations
 
   // MyBatis
   val mybatisScanAllXml: Boolean
@@ -128,10 +122,6 @@ class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettin
 
   fun setResolveInterfaceImplementations(value: Boolean?) {
     myState.resolveInterfaceImplementations = value
-  }
-
-  fun setTraverseAllImplementations(value: Boolean?) {
-    myState.traverseAllImplementations = value
   }
 
   fun setMybatisScanAllXml(value: Boolean?) {

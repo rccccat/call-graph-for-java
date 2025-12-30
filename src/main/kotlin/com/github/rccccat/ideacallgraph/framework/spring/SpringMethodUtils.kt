@@ -42,7 +42,7 @@ private fun hasInterfaceMapping(method: PsiMethod): Boolean {
   }) {
     return true
   }
-  return hasInterfaceMappingByName(containingClass, method.name, paramCount)
+  return false
 }
 
 private fun collectAllInterfaces(psiClass: PsiClass): List<PsiClass> {
@@ -83,49 +83,6 @@ private fun resolveReferencedInterfaces(psiClass: PsiClass): List<PsiClass> {
   }
 }
 
-private fun hasInterfaceMappingByName(
-    psiClass: PsiClass,
-    methodName: String,
-    paramCount: Int,
-): Boolean {
-  val interfaceNames = collectInterfaceTypeNames(psiClass)
-  if (interfaceNames.isEmpty()) return false
-  val scope = GlobalSearchScope.allScope(psiClass.project)
-  val shortNamesCache = PsiShortNamesCache.getInstance(psiClass.project)
-  return shortNamesCache.getMethodsByName(methodName, scope).any { candidate ->
-    val owner = candidate.containingClass ?: return@any false
-    if (!owner.isInterface) return@any false
-    if (!matchesInterfaceName(owner, interfaceNames)) return@any false
-    candidate.parameterList.parametersCount == paramCount && hasMappingIndicator(candidate)
-  }
-}
-
-private fun collectInterfaceTypeNames(psiClass: PsiClass): Set<String> {
-  val names = LinkedHashSet<String>()
-  psiClass.implementsList?.referenceElements?.forEach { reference ->
-    reference.qualifiedName?.let { names.add(it) }
-    reference.referenceName?.let { names.add(it) }
-  }
-  psiClass.superTypes.forEach { type ->
-    val canonical = type.canonicalText.substringBefore("<").trim()
-    if (canonical.isNotBlank()) {
-      names.add(canonical)
-      names.add(canonical.substringAfterLast("."))
-    }
-  }
-  return names
-}
-
-private fun matchesInterfaceName(
-    owner: PsiClass,
-    interfaceNames: Set<String>,
-): Boolean {
-  val qualified = owner.qualifiedName
-  val simple = owner.name
-  return (qualified != null && interfaceNames.contains(qualified)) ||
-      (simple != null && interfaceNames.contains(simple))
-}
-
 private fun hasInterfaceMethodMapping(
     interfaceClass: PsiClass,
     name: String,
@@ -139,11 +96,5 @@ private fun hasInterfaceMethodMapping(
 
 private fun hasMappingIndicator(method: PsiMethod): Boolean {
   return hasAnyAnnotationOrMeta(method, SpringAnnotations.mappingAnnotations) ||
-      hasMappingNameFallback(method) ||
-      hasMappingTextFallback(method)
-}
-
-private fun hasMappingTextFallback(method: PsiMethod): Boolean {
-  val text = method.text
-  return text.contains("@RequestMapping") || Regex("@\\w+Mapping\\b").containsMatchIn(text)
+      hasMappingNameFallback(method)
 }

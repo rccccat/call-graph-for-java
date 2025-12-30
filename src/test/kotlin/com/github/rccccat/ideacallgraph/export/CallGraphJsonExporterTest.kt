@@ -44,6 +44,7 @@ class CallGraphJsonExporterTest : BasePlatformTestCase() {
 
     val method = findPingMethod(file)
     val service = CallGraphServiceImpl.getInstance(project)
+    service.resetCaches()
     val graph = service.buildCallGraph(method) ?: error("Call graph build failed")
     val codeMap = CodeExtractor().extractCode(graph)
     val export = JsonExporter().convertToJsonExport(graph.data, codeMap)

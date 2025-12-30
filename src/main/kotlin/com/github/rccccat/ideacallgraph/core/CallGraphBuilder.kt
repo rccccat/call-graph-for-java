@@ -31,13 +31,13 @@ class CallGraphBuilder(
     private val project: Project,
     private val springAnalyzer: SpringAnalyzer,
     private val visitor: JavaCallVisitor,
+    private val typeResolver: TypeResolver,
+    private val interfaceResolver: InterfaceResolver,
+    private val myBatisAnalyzer: MyBatisAnalyzer,
+    private val nodeFactory: PsiNodeFactory,
+    private val parameterUsageAnalyzer: ParameterUsageAnalyzer,
 ) {
   private val traverser = DepthFirstTraverser()
-  private val typeResolver = TypeResolver(project)
-  private val interfaceResolver = InterfaceResolver(project, springAnalyzer)
-  private val myBatisAnalyzer = MyBatisAnalyzer(project)
-  private val nodeFactory = PsiNodeFactory(project, springAnalyzer, myBatisAnalyzer)
-  private val parameterUsageAnalyzer by lazy { ParameterUsageAnalyzer(project) }
 
   /** Builds a call graph starting from the given element. */
   fun build(startElement: PsiElement): IdeCallGraph? {

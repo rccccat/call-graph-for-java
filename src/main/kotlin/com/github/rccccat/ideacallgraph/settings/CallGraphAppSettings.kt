@@ -30,7 +30,6 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
       var includeToString: Boolean = false,
       var includeHashCodeEquals: Boolean = false,
       var resolveInterfaceImplementations: Boolean = true,
-      var traverseAllImplementations: Boolean = false,
       var mybatisScanAllXml: Boolean = false,
       // Parameter usage filtering (experimental, disabled by default for performance)
       var filterByParameterUsage: Boolean = false,
@@ -69,9 +68,6 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
 
   val resolveInterfaceImplementations: Boolean
     get() = myState.resolveInterfaceImplementations
-
-  val traverseAllImplementations: Boolean
-    get() = myState.traverseAllImplementations
 
   val mybatisScanAllXml: Boolean
     get() = myState.mybatisScanAllXml
@@ -115,10 +111,6 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
 
   fun setResolveInterfaceImplementations(value: Boolean) {
     myState.resolveInterfaceImplementations = value
-  }
-
-  fun setTraverseAllImplementations(value: Boolean) {
-    myState.traverseAllImplementations = value
   }
 
   fun setMybatisScanAllXml(value: Boolean) {

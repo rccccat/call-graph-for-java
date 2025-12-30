@@ -2,30 +2,23 @@ package com.github.rccccat.ideacallgraph.core.visitor
 
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.JavaRecursiveElementVisitor
-import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassType
-import com.intellij.psi.PsiConditionalExpression
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiEllipsisType
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiField
-import com.intellij.psi.PsiLambdaExpression
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiMethodReferenceExpression
 import com.intellij.psi.PsiNewExpression
 import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiParenthesizedExpression
-import com.intellij.psi.PsiPrimitiveType
 import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiSuperExpression
 import com.intellij.psi.PsiType
 import com.intellij.psi.PsiTypeCastExpression
-import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.psi.util.TypeConversionUtil
 
 /** Visitor for finding call targets in Java code. */
 class JavaCallVisitor {
@@ -55,20 +48,7 @@ class JavaCallVisitor {
                 } else {
                   null
                 }
-            // Fallback to simple resolve, but validate parameter types match
-            // Exception: reflection methods are always accepted
-            val fallbackResolvedMethod =
-                if (resolvedMethod == null) {
-                  val method = expression.resolveMethod()
-                  val arguments = expression.argumentList.expressions.toList()
-                  method?.takeIf { isReflectionMethod(it) || matchesParameterTypes(it, arguments) }
-                } else {
-                  null
-                }
-            val targetMethod =
-                resolvedMethod
-                    ?: fallbackResolvedMethod
-                    ?: resolveJavaCallTarget(expression, injectionPoint, context)
+            val targetMethod = resolvedMethod
 
             if (targetMethod != null) {
               // Skip override resolution for super calls - they are statically bound
@@ -144,46 +124,6 @@ class JavaCallVisitor {
           null
         }
       }
-
-  private fun resolveJavaCallTarget(
-      expression: PsiMethodCallExpression,
-      injectionPoint: PsiElement?,
-      context: VisitorContext,
-  ): PsiMethod? {
-    val methodName = expression.methodExpression.referenceName ?: return null
-    val qualifierExpression = expression.methodExpression.qualifierExpression
-    val qualifierType = qualifierExpression?.type
-    val baseElement = resolveQualifierSource(qualifierExpression)
-    val baseType = (baseElement as? PsiVariable)?.type
-    val contextElement = baseElement ?: injectionPoint
-
-    val targetClass =
-        context.typeResolver.resolveClassFromType(qualifierType, contextElement)
-            ?: baseType?.let {
-              context.typeResolver.resolveCollectionElementClass(it, contextElement)
-                  ?: context.typeResolver.resolveClassFromType(it, contextElement)
-            }
-            ?: resolveInjectedTargetClass(injectionPoint, contextElement, context)
-
-    val candidates = targetClass?.findMethodsByName(methodName, true).orEmpty()
-    val arguments = expression.argumentList.expressions.toList()
-    return candidates.firstOrNull { method -> matchesParameterTypes(method, arguments) }
-  }
-
-  private fun resolveInjectedTargetClass(
-      injectionPoint: PsiElement?,
-      contextElement: PsiElement?,
-      context: VisitorContext,
-  ): PsiClass? {
-    val type =
-        when (injectionPoint) {
-          is PsiField -> injectionPoint.type
-          is PsiParameter -> injectionPoint.type
-          else -> return null
-        }
-    return context.typeResolver.resolveCollectionElementClass(type, contextElement)
-        ?: context.typeResolver.resolveClassFromType(type, contextElement)
-  }
 
   private fun resolveInjectedField(
       field: PsiField,
@@ -306,123 +246,6 @@ class JavaCallVisitor {
       resolved == field
     }
   }
-
-  private fun matchesParameterTypes(
-      method: PsiMethod,
-      arguments: List<PsiExpression>,
-  ): Boolean {
-    val parameters = method.parameterList.parameters
-    if (!method.isVarArgs) {
-      if (parameters.size != arguments.size) return false
-      return parameters.indices.all { index ->
-        isAssignable(parameters[index].type, arguments[index])
-      }
-    }
-
-    if (arguments.size < parameters.size - 1) return false
-
-    val fixedCount = parameters.size - 1
-    for (index in 0 until fixedCount) {
-      if (!isAssignable(parameters[index].type, arguments[index])) return false
-    }
-
-    val varargParameter = parameters.last()
-    val varargType = varargParameter.type
-    if (arguments.size == parameters.size) {
-      val lastArgumentType = arguments.last().type
-      if (lastArgumentType == null) return true
-      if (TypeConversionUtil.isAssignable(varargType, lastArgumentType)) return true
-    }
-
-    val componentType =
-        (varargType as? PsiEllipsisType)?.componentType
-            ?: (varargType as? PsiArrayType)?.componentType
-            ?: varargType
-    for (argIndex in fixedCount until arguments.size) {
-      if (!isAssignable(componentType, arguments[argIndex])) return false
-    }
-    return true
-  }
-
-  private fun isAssignable(
-      parameterType: PsiType,
-      argument: PsiExpression,
-  ): Boolean {
-    val argumentType = argument.type
-    if (argumentType == null) {
-      // Null types can occur for poly expressions (lambdas, method references, diamond operators)
-      // Only allow null-type matching for known poly expression types to avoid false positives
-      return isPolyExpression(argument)
-    }
-    if (argumentType == PsiType.NULL) {
-      return parameterType !is PsiPrimitiveType
-    }
-    // Object type accepts any reference type
-    if (parameterType is PsiClassType) {
-      val paramClassName = parameterType.resolve()?.qualifiedName ?: parameterType.canonicalText
-      if (paramClassName == "java.lang.Object" || paramClassName == "Object") {
-        return argumentType !is PsiPrimitiveType
-      }
-    }
-    // Handle autoboxing/unboxing explicitly
-    if (TypeConversionUtil.isAssignable(parameterType, argumentType)) return true
-    // Check for boxing: int -> Integer
-    if (argumentType is PsiPrimitiveType && parameterType is PsiClassType) {
-      val boxedType = argumentType.getBoxedType(argument)
-      if (boxedType != null && TypeConversionUtil.isAssignable(parameterType, boxedType)) {
-        return true
-      }
-      // Fallback: check by name for primitive wrapper matching
-      val paramClassName = parameterType.resolve()?.qualifiedName ?: parameterType.canonicalText
-      val primitiveToWrapper =
-          mapOf(
-              "int" to listOf("java.lang.Integer", "Integer"),
-              "long" to listOf("java.lang.Long", "Long"),
-              "double" to listOf("java.lang.Double", "Double"),
-              "float" to listOf("java.lang.Float", "Float"),
-              "boolean" to listOf("java.lang.Boolean", "Boolean"),
-              "byte" to listOf("java.lang.Byte", "Byte"),
-              "short" to listOf("java.lang.Short", "Short"),
-              "char" to listOf("java.lang.Character", "Character"),
-          )
-      val wrapperNames = primitiveToWrapper[argumentType.canonicalText]
-      if (wrapperNames != null && wrapperNames.any { it == paramClassName }) {
-        return true
-      }
-    }
-    // Check for unboxing: Integer -> int
-    if (parameterType is PsiPrimitiveType && argumentType is PsiClassType) {
-      val unboxedType = PsiPrimitiveType.getUnboxedType(argumentType)
-      if (unboxedType != null && TypeConversionUtil.isAssignable(parameterType, unboxedType)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private fun isReflectionMethod(method: PsiMethod): Boolean {
-    val qualifiedName = method.containingClass?.qualifiedName ?: return false
-    return qualifiedName == "java.lang.Class" || qualifiedName == "java.lang.reflect.Method"
-  }
-
-  /**
-   * Checks if an expression is a poly expression (lambda, method reference, diamond, conditional).
-   */
-  private fun isPolyExpression(expression: PsiExpression): Boolean =
-      when (expression) {
-        is PsiLambdaExpression -> true
-        is PsiMethodReferenceExpression -> true
-        is PsiNewExpression -> {
-          // Diamond operator: new ArrayList<>() has empty type arguments
-          val typeArgs =
-              expression.classOrAnonymousClassReference?.parameterList?.typeParameterElements
-          typeArgs != null && typeArgs.isEmpty()
-        }
-        is PsiConditionalExpression -> true
-        is PsiParenthesizedExpression ->
-            expression.expression?.let { isPolyExpression(it) } ?: false
-        else -> false
-      }
 
   private fun resolveOverrideImplementationsIfNeeded(
       method: PsiMethod,

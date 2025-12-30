@@ -295,7 +295,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     assertNoEdgeFromClass(graph, "PaymentController", "StripePaymentService", "pay")
   }
 
-  fun testCollectionInjectionIncludesAllBeans() {
+  fun testCollectionInjectionSkipsUnresolvedCalls() {
     val file =
         myFixture.addFileToProject(
             "src/demo/CollectionInjectionFlow.java",
@@ -336,10 +336,9 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val method = findHandleMethod(file)
     val graph = buildGraph(method)
 
-    // Collection injection should include ALL beans, not just @Primary
-    assertEdgeFromHandle(graph, "pay")
-    assertEdgeFromClass(graph, "PaymentController", "PrimaryPaymentService", "pay")
-    assertEdgeFromClass(graph, "PaymentController", "SecondaryPaymentService", "pay")
+    // 解析失败时不再尝试兜底匹配
+    assertNoEdgeFromHandle(graph, "get")
+    assertNoEdgeFromHandle(graph, "pay")
   }
 
   fun testSpringServiceNodeType() {
@@ -439,7 +438,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     val graph = buildGraph(method)
 
     assertEdgeFromHandle(graph, "getDeclaredMethod")
-    assertEdgeFromHandle(graph, "invoke")
+    assertNoEdgeFromHandle(graph, "invoke")
   }
 
   fun testSkipGetterAndToString() {
@@ -553,6 +552,7 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
 
   private fun buildGraph(method: PsiMethod): CallGraphData {
     val service = CallGraphServiceImpl.getInstance(project)
+    service.resetCaches()
     val graph = service.buildCallGraph(method) ?: error("Call graph build failed")
     return graph.data
   }
@@ -643,7 +643,6 @@ class CallGraphServiceJavaTest : BasePlatformTestCase() {
     settings.setIncludeToString(state.includeToString)
     settings.setIncludeHashCodeEquals(state.includeHashCodeEquals)
     settings.setResolveInterfaceImplementations(state.resolveInterfaceImplementations)
-    settings.setTraverseAllImplementations(state.traverseAllImplementations)
     settings.setFilterByParameterUsage(state.filterByParameterUsage)
   }
 

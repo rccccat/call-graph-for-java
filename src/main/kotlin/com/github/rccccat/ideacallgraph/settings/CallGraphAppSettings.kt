@@ -13,108 +13,115 @@ import com.intellij.openapi.components.Storage
 @State(name = "CallGraphAppSettings", storages = [Storage("call-graph-app-settings.xml")])
 @Service(Service.Level.APP)
 class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State> {
+    data class State(
+        var projectMaxDepth: Int = 5,
+        var thirdPartyMaxDepth: Int = 1,
+        var excludePackagePatterns: MutableList<String> =
+            mutableListOf(
+                "java\\..*",
+                "javax\\..*",
+                "kotlin\\..*",
+                "kotlinx\\..*",
+                "org\\.springframework\\..*",
+                "org\\.apache\\..*",
+                "pkg:.*exception.*",
+            ),
+        var includeGettersSetters: Boolean = false,
+        var includeToString: Boolean = false,
+        var includeHashCodeEquals: Boolean = false,
+        var resolveInterfaceImplementations: Boolean = true,
+        var mybatisScanAllXml: Boolean = false,
+        var springEnableFullScan: Boolean = false,
+        // UI defaults
+        var treeMaxDisplayDepth: Int = 5,
+        var treeMaxChildrenPerNode: Int = 20,
+        var treeInitialExpandDepth: Int = 2,
+    )
 
-  data class State(
-      var projectMaxDepth: Int = 5,
-      var thirdPartyMaxDepth: Int = 1,
-      var excludePackagePatterns: MutableList<String> =
-          mutableListOf(
-              "java\\..*",
-              "javax\\..*",
-              "kotlin\\..*",
-              "kotlinx\\..*",
-              "org\\.springframework\\..*",
-              "org\\.apache\\..*",
-              "pkg:.*exception.*",
-          ),
-      var includeGettersSetters: Boolean = false,
-      var includeToString: Boolean = false,
-      var includeHashCodeEquals: Boolean = false,
-      var resolveInterfaceImplementations: Boolean = true,
-      var mybatisScanAllXml: Boolean = false,
-      // UI defaults
-      var treeMaxDisplayDepth: Int = 5,
-      var treeMaxChildrenPerNode: Int = 20,
-      var treeInitialExpandDepth: Int = 2,
-  )
+    private var myState = State()
 
-  private var myState = State()
+    override fun getState(): State = myState
 
-  override fun getState(): State = myState
+    override fun loadState(state: State) {
+        myState = state
+    }
 
-  override fun loadState(state: State) {
-    myState = state
-  }
+    // Getters
+    val projectMaxDepth: Int
+        get() = myState.projectMaxDepth
 
-  // Getters
-  val projectMaxDepth: Int
-    get() = myState.projectMaxDepth
+    val thirdPartyMaxDepth: Int
+        get() = myState.thirdPartyMaxDepth
 
-  val thirdPartyMaxDepth: Int
-    get() = myState.thirdPartyMaxDepth
+    val excludePackagePatterns: List<String>
+        get() = myState.excludePackagePatterns
 
-  val excludePackagePatterns: List<String>
-    get() = myState.excludePackagePatterns
+    val includeGettersSetters: Boolean
+        get() = myState.includeGettersSetters
 
-  val includeGettersSetters: Boolean
-    get() = myState.includeGettersSetters
+    val includeToString: Boolean
+        get() = myState.includeToString
 
-  val includeToString: Boolean
-    get() = myState.includeToString
+    val includeHashCodeEquals: Boolean
+        get() = myState.includeHashCodeEquals
 
-  val includeHashCodeEquals: Boolean
-    get() = myState.includeHashCodeEquals
+    val resolveInterfaceImplementations: Boolean
+        get() = myState.resolveInterfaceImplementations
 
-  val resolveInterfaceImplementations: Boolean
-    get() = myState.resolveInterfaceImplementations
+    val mybatisScanAllXml: Boolean
+        get() = myState.mybatisScanAllXml
 
-  val mybatisScanAllXml: Boolean
-    get() = myState.mybatisScanAllXml
+    val springEnableFullScan: Boolean
+        get() = myState.springEnableFullScan
 
-  val treeMaxDisplayDepth: Int
-    get() = myState.treeMaxDisplayDepth
+    val treeMaxDisplayDepth: Int
 
-  val treeMaxChildrenPerNode: Int
-    get() = myState.treeMaxChildrenPerNode
+        get() = myState.treeMaxDisplayDepth
 
-  val treeInitialExpandDepth: Int
-    get() = myState.treeInitialExpandDepth
+    val treeMaxChildrenPerNode: Int
+        get() = myState.treeMaxChildrenPerNode
 
-  // Setters
-  fun setProjectMaxDepth(value: Int) {
-    myState.projectMaxDepth = value
-  }
+    val treeInitialExpandDepth: Int
+        get() = myState.treeInitialExpandDepth
 
-  fun setThirdPartyMaxDepth(value: Int) {
-    myState.thirdPartyMaxDepth = value
-  }
+    // Setters
+    fun setProjectMaxDepth(value: Int) {
+        myState.projectMaxDepth = value
+    }
 
-  fun setExcludePackagePatterns(patterns: List<String>) {
-    myState.excludePackagePatterns = patterns.toMutableList()
-  }
+    fun setThirdPartyMaxDepth(value: Int) {
+        myState.thirdPartyMaxDepth = value
+    }
 
-  fun setIncludeGettersSetters(value: Boolean) {
-    myState.includeGettersSetters = value
-  }
+    fun setExcludePackagePatterns(patterns: List<String>) {
+        myState.excludePackagePatterns = patterns.toMutableList()
+    }
 
-  fun setIncludeToString(value: Boolean) {
-    myState.includeToString = value
-  }
+    fun setIncludeGettersSetters(value: Boolean) {
+        myState.includeGettersSetters = value
+    }
 
-  fun setIncludeHashCodeEquals(value: Boolean) {
-    myState.includeHashCodeEquals = value
-  }
+    fun setIncludeToString(value: Boolean) {
+        myState.includeToString = value
+    }
 
-  fun setResolveInterfaceImplementations(value: Boolean) {
-    myState.resolveInterfaceImplementations = value
-  }
+    fun setIncludeHashCodeEquals(value: Boolean) {
+        myState.includeHashCodeEquals = value
+    }
 
-  fun setMybatisScanAllXml(value: Boolean) {
-    myState.mybatisScanAllXml = value
-  }
+    fun setResolveInterfaceImplementations(value: Boolean) {
+        myState.resolveInterfaceImplementations = value
+    }
 
-  companion object {
-    fun getInstance(): CallGraphAppSettings =
-        ApplicationManager.getApplication().getService(CallGraphAppSettings::class.java)
-  }
+    fun setMybatisScanAllXml(value: Boolean) {
+        myState.mybatisScanAllXml = value
+    }
+
+    fun setSpringEnableFullScan(value: Boolean) {
+        myState.springEnableFullScan = value
+    }
+
+    companion object {
+        fun getInstance(): CallGraphAppSettings = ApplicationManager.getApplication().getService(CallGraphAppSettings::class.java)
+    }
 }

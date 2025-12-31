@@ -18,7 +18,7 @@ class SpringMethodCache(
   private val mappingIndexCache =
       cacheManager.createCachedValue { ConcurrentHashMap<String, MethodMappingIndex>() }
 
-  fun mappingIndexCache(): ConcurrentHashMap<String, MethodMappingIndex> =
+  internal fun mappingIndexCache(): ConcurrentHashMap<String, MethodMappingIndex> =
       mappingIndexCache.value
 
   companion object {

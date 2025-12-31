@@ -1,7 +1,12 @@
 package com.github.rccccat.ideacallgraph.util
 
+import com.intellij.psi.PsiArrayType
+import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiType
+
+private fun normalizeJavaLang(text: String): String = text.replace("java.lang.", "")
 
 class ExcludePatternMatcher private constructor(
     private val entries: List<PatternEntry>,
@@ -17,6 +22,8 @@ class ExcludePatternMatcher private constructor(
   private data class PatternEntry(
       val scope: Scope,
       val regex: Regex,
+      val rawText: String,
+      val normalizedRawText: String,
   )
 
   private data class ParseResult(
@@ -46,7 +53,10 @@ class ExcludePatternMatcher private constructor(
               .getOrElse { ex ->
                 return ParseResult(null, ex.message ?: "Invalid regex")
               }
-      return ParseResult(PatternEntry(scope, regex), null)
+      return ParseResult(
+          PatternEntry(scope, regex, regexText, normalizeJavaLang(regexText)),
+          null,
+      )
     }
 
     private fun parseScope(raw: String): Pair<Scope, String> =
@@ -75,6 +85,8 @@ class ExcludePatternMatcher private constructor(
       val methodName: String,
       val methodSignature: String,
       val qualifiedSignature: String?,
+      val qualifiedMethodSignature: String,
+      val qualifiedSignatureWithQualifiedParams: String?,
   ) {
     val anyTargets: List<String> =
         listOfNotNull(
@@ -83,12 +95,21 @@ class ExcludePatternMatcher private constructor(
             className,
             methodName,
             methodSignature,
+            qualifiedMethodSignature,
             qualifiedSignature,
+            qualifiedSignatureWithQualifiedParams,
         )
 
     val classTargets: List<String> = listOfNotNull(classQualifiedName, className)
 
-    val signatureTargets: List<String> = listOfNotNull(methodSignature, qualifiedSignature)
+    val signatureTargets: List<String> =
+        listOfNotNull(
+                methodSignature,
+                qualifiedMethodSignature,
+                qualifiedSignature,
+                qualifiedSignatureWithQualifiedParams,
+            )
+            .distinct()
 
     companion object {
       fun from(method: PsiMethod): MethodTargets {
@@ -100,9 +121,18 @@ class ExcludePatternMatcher private constructor(
             }
         val className = containingClass?.name
         val paramTypes = method.parameterList.parameters.joinToString(",") { it.type.canonicalText }
+        val qualifiedParamTypes =
+            method.parameterList.parameters.joinToString(",") { param ->
+              qualifiedTypeText(param.type)
+            }
         val methodSignature = "${method.name}($paramTypes)"
+        val qualifiedMethodSignature = "${method.name}($qualifiedParamTypes)"
         val qualifiedSignature =
             qualifiedClassName?.let { classNameValue -> "$classNameValue#$methodSignature" }
+        val qualifiedSignatureWithQualifiedParams =
+            qualifiedClassName?.let { classNameValue ->
+              "$classNameValue#$qualifiedMethodSignature"
+            }
         return MethodTargets(
             packageName = packageName,
             classQualifiedName = qualifiedClassName,
@@ -110,17 +140,47 @@ class ExcludePatternMatcher private constructor(
             methodName = method.name,
             methodSignature = methodSignature,
             qualifiedSignature = qualifiedSignature,
+            qualifiedMethodSignature = qualifiedMethodSignature,
+            qualifiedSignatureWithQualifiedParams = qualifiedSignatureWithQualifiedParams,
         )
       }
+
+      private fun qualifiedTypeText(type: PsiType): String =
+          when (type) {
+            is PsiArrayType -> "${qualifiedTypeText(type.componentType)}[]"
+            is PsiClassType -> {
+              val resolved = type.resolve()
+              val rawName = resolved?.qualifiedName ?: type.canonicalText
+              val parameters = type.parameters
+              if (parameters.isEmpty()) {
+                rawName
+              } else {
+                val typeArgs = parameters.joinToString(",") { param -> qualifiedTypeText(param) }
+                "$rawName<$typeArgs>"
+              }
+            }
+
+            else -> type.canonicalText
+          }
     }
   }
 
   private fun PatternEntry.matches(targets: MethodTargets): Boolean =
       when (scope) {
-        Scope.ANY -> targets.anyTargets.any { regex.matches(it) }
-        Scope.PACKAGE -> targets.packageName?.let { regex.matches(it) } ?: false
-        Scope.CLASS -> targets.classTargets.any { regex.matches(it) }
-        Scope.METHOD -> regex.matches(targets.methodName)
-        Scope.SIGNATURE -> targets.signatureTargets.any { regex.matches(it) }
+        Scope.ANY -> targets.anyTargets.any { target -> target == rawText || regex.matches(target) }
+        Scope.PACKAGE ->
+            targets.packageName?.let { target -> target == rawText || regex.matches(target) }
+                ?: false
+        Scope.CLASS -> targets.classTargets.any { target -> target == rawText || regex.matches(target) }
+        Scope.METHOD -> targets.methodName == rawText || regex.matches(targets.methodName)
+        Scope.SIGNATURE ->
+            targets.signatureTargets.any { target ->
+              target == rawText ||
+                  target == normalizedRawText ||
+                  normalizeJavaLang(target) == rawText ||
+                  normalizeJavaLang(target) == normalizedRawText ||
+                  regex.matches(target)
+            }
       }
+
 }

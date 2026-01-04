@@ -70,13 +70,6 @@ jobs:
             **Build Time:** `${{ steps.version.outputs.TIMESTAMP }}`
             **Commit Message:** ${{ github.event.head_commit.message }}
 
-            ### ✨ Latest Features:
-            - 🔗 Interface implementation resolution with Spring support
-            - 🎯 @Primary/@Qualifier priority resolution
-            - 📋 Generic collection injection (List, Map, Set)
-            - 🧩 Kotlin extension functions tracking
-            - ⚡ Kotlin delegation and coroutines analysis
-            - 🚀 K2 compiler mode compatibility
 
             ### 📥 Installation:
             1. Download `idea-call-graph-${{ steps.version.outputs.VERSION }}.zip` below

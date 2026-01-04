@@ -6,6 +6,8 @@ import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.github.rccccat.ideacallgraph.util.SpringAnnotations
 import com.github.rccccat.ideacallgraph.util.findAnnotatedClasses
 import com.github.rccccat.ideacallgraph.util.hasAnyAnnotationOrMeta
+import com.github.rccccat.ideacallgraph.util.resolveValidPointers
+import com.github.rccccat.ideacallgraph.util.toSmartPointerList
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.progress.EmptyProgressIndicator
 import com.intellij.openapi.progress.ProgressIndicator
@@ -28,25 +30,33 @@ class SpringApiScanner(
     private val controllerAnnotationClassesCache =
         cacheManager.createCachedValue {
             val javaPsiFacade = JavaPsiFacade.getInstance(project)
-            collectControllerAnnotationClasses(
-                javaPsiFacade,
-                GlobalSearchScope.projectScope(project),
-                resolveIndicator(),
-            )
+            val classes =
+                collectControllerAnnotationClasses(
+                    javaPsiFacade,
+                    GlobalSearchScope.projectScope(project),
+                    resolveIndicator(),
+                )
+            toSmartPointerList(project, classes)
         }
     private val fullScanBatchSize = 200
 
     private val controllerClassesCache =
         cacheManager.createCachedValue {
             val scope = GlobalSearchScope.projectScope(project)
-            collectControllerClasses(
-                controllerAnnotationClassesCache.value,
-                scope,
-                resolveIndicator(),
-            )
+            val annotationClasses = resolveValidPointers(controllerAnnotationClassesCache.value)
+            val classes =
+                collectControllerClasses(
+                    annotationClasses,
+                    scope,
+                    resolveIndicator(),
+                )
+            toSmartPointerList(project, classes)
         }
     private val endpointsCache =
-        cacheManager.createCachedValue { scanAllEndpointsInternal(resolveIndicator()) }
+        cacheManager.createCachedValue {
+            val endpoints = scanAllEndpointsInternal(resolveIndicator())
+            toSmartPointerList(project, endpoints)
+        }
 
     /**
      * Scans the project for all Spring API endpoint methods.
@@ -57,7 +67,7 @@ class SpringApiScanner(
     fun scanAllEndpoints(indicator: ProgressIndicator): List<PsiMethod> {
         scanIndicator.set(indicator)
         try {
-            val endpoints = endpointsCache.value
+            val endpoints = resolveValidPointers(endpointsCache.value)
             indicator.text = "Found ${endpoints.size} API endpoints"
             indicator.fraction = 1.0
             return endpoints
@@ -96,7 +106,7 @@ class SpringApiScanner(
 
     private fun scanAllEndpointsInternal(indicator: ProgressIndicator): List<PsiMethod> {
         val endpoints = mutableListOf<PsiMethod>()
-        val controllerClasses = controllerClassesCache.value
+        val controllerClasses = resolveValidPointers(controllerClassesCache.value)
         indicator.text = "Scanning Spring controller methods..."
         indicator.isIndeterminate = false
 

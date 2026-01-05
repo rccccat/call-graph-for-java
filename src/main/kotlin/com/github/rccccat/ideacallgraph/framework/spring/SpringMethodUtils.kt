@@ -1,6 +1,7 @@
 package com.github.rccccat.ideacallgraph.framework.spring
 
 import com.github.rccccat.ideacallgraph.util.SpringAnnotations
+import com.github.rccccat.ideacallgraph.util.buildClassKey
 import com.github.rccccat.ideacallgraph.util.hasAnyAnnotationOrMeta
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -11,7 +12,7 @@ import com.intellij.psi.PsiSubstitutor
 internal fun hasMappingOnMethodOrSuper(method: PsiMethod): Boolean {
   val containingClass = method.containingClass ?: return false
   val cache = SpringMethodCache.getInstance(method.project).mappingIndexCache()
-  val classKey = classCacheKey(containingClass)
+  val classKey = buildClassKey(containingClass)
   val index = cache.computeIfAbsent(classKey) { buildMethodMappingIndex(containingClass) }
 
   val methodSignature = methodSignatureKey(method)
@@ -75,10 +76,9 @@ private fun resolveReferencedInterfaces(psiClass: PsiClass): List<PsiClass> {
   }
 }
 
-private fun hasMappingIndicator(method: PsiMethod): Boolean {
-  return hasAnyAnnotationOrMeta(method, SpringAnnotations.mappingAnnotations) ||
-      hasMappingNameFallback(method)
-}
+private fun hasMappingIndicator(method: PsiMethod): Boolean =
+    hasAnyAnnotationOrMeta(method, SpringAnnotations.mappingAnnotations) ||
+        hasMappingNameFallback(method)
 
 private fun buildMethodMappingIndex(psiClass: PsiClass): MethodMappingIndex {
   val classMappingSignatures = LinkedHashSet<String>()
@@ -121,11 +121,3 @@ private fun interfaceMethodKey(
     name: String,
     paramCount: Int,
 ): String = "$name#$paramCount"
-
-private fun classCacheKey(psiClass: PsiClass): String {
-  val qualifiedName = psiClass.qualifiedName
-  if (qualifiedName != null) return qualifiedName
-  val filePath = psiClass.containingFile?.virtualFile?.path
-  val className = psiClass.name ?: "Anonymous"
-  return if (filePath != null) "$filePath#$className" else className
-}

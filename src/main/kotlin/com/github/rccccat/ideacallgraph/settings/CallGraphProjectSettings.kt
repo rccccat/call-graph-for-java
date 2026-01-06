@@ -17,120 +17,121 @@ import com.intellij.openapi.project.Project
 )
 @Service(Service.Level.PROJECT)
 class CallGraphProjectSettings : PersistentStateComponent<CallGraphProjectSettings.State> {
-    data class State(
-        // Analysis settings - null means use app defaults
-        var projectMaxDepth: Int? = null,
-        var thirdPartyMaxDepth: Int? = null,
-        var excludePackagePatterns: MutableList<String>? = null,
-        // Method filtering - null means use app defaults
-        var includeGettersSetters: Boolean? = null,
-        var includeToString: Boolean? = null,
-        var includeHashCodeEquals: Boolean? = null,
-        // Interface resolution - null means use app defaults
-        var resolveInterfaceImplementations: Boolean? = null,
-        // MyBatis settings - null means use app defaults
-        var mybatisScanAllXml: Boolean? = null,
-        var springEnableFullScan: Boolean? = null,
-        // UI settings - null means use app defaults
-        var treeMaxDisplayDepth: Int? = null,
-        var treeMaxChildrenPerNode: Int? = null,
-        var treeInitialExpandDepth: Int? = null,
-    )
+  data class State(
+      // Analysis settings - null means use app defaults
+      var projectMaxDepth: Int? = null,
+      var thirdPartyMaxDepth: Int? = null,
+      var excludePackagePatterns: MutableList<String>? = null,
+      // Method filtering - null means use app defaults
+      var includeGettersSetters: Boolean? = null,
+      var includeToString: Boolean? = null,
+      var includeHashCodeEquals: Boolean? = null,
+      // Interface resolution - null means use app defaults
+      var resolveInterfaceImplementations: Boolean? = null,
+      // MyBatis settings - null means use app defaults
+      var mybatisScanAllXml: Boolean? = null,
+      var springEnableFullScan: Boolean? = null,
+      // UI settings - null means use app defaults
+      var treeMaxDisplayDepth: Int? = null,
+      var treeMaxChildrenPerNode: Int? = null,
+      var treeInitialExpandDepth: Int? = null,
+  )
 
-    private var myState = State()
+  private var myState = State()
 
-    override fun getState(): State = myState
+  override fun getState(): State = myState
 
-    override fun loadState(state: State) {
-        myState = state
-    }
+  override fun loadState(state: State) {
+    myState = state
+  }
 
-    // Analysis settings with fallback to app defaults
-    val projectMaxDepth: Int
-        get() = myState.projectMaxDepth ?: CallGraphAppSettings.getInstance().projectMaxDepth
+  // Analysis settings with fallback to app defaults
+  val projectMaxDepth: Int
+    get() = myState.projectMaxDepth ?: CallGraphAppSettings.getInstance().projectMaxDepth
 
-    val thirdPartyMaxDepth: Int
-        get() = myState.thirdPartyMaxDepth ?: CallGraphAppSettings.getInstance().thirdPartyMaxDepth
+  val thirdPartyMaxDepth: Int
+    get() = myState.thirdPartyMaxDepth ?: CallGraphAppSettings.getInstance().thirdPartyMaxDepth
 
-    val excludePackagePatterns: List<String>
-        get() =
-            myState.excludePackagePatterns ?: CallGraphAppSettings.getInstance().excludePackagePatterns
+  val excludePackagePatterns: List<String>
+    get() =
+        myState.excludePackagePatterns ?: CallGraphAppSettings.getInstance().excludePackagePatterns
 
-    // Method filtering (direct access, no defaults)
-    val includeGettersSetters: Boolean
-        get() =
-            myState.includeGettersSetters ?: CallGraphAppSettings.getInstance().includeGettersSetters
+  // Method filtering (direct access, no defaults)
+  val includeGettersSetters: Boolean
+    get() =
+        myState.includeGettersSetters ?: CallGraphAppSettings.getInstance().includeGettersSetters
 
-    val includeToString: Boolean
-        get() = myState.includeToString ?: CallGraphAppSettings.getInstance().includeToString
+  val includeToString: Boolean
+    get() = myState.includeToString ?: CallGraphAppSettings.getInstance().includeToString
 
-    val includeHashCodeEquals: Boolean
-        get() =
-            myState.includeHashCodeEquals ?: CallGraphAppSettings.getInstance().includeHashCodeEquals
+  val includeHashCodeEquals: Boolean
+    get() =
+        myState.includeHashCodeEquals ?: CallGraphAppSettings.getInstance().includeHashCodeEquals
 
-    // Interface resolution
-    val resolveInterfaceImplementations: Boolean
-        get() =
-            myState.resolveInterfaceImplementations
-                ?: CallGraphAppSettings.getInstance().resolveInterfaceImplementations
+  // Interface resolution
+  val resolveInterfaceImplementations: Boolean
+    get() =
+        myState.resolveInterfaceImplementations
+            ?: CallGraphAppSettings.getInstance().resolveInterfaceImplementations
 
-    // MyBatis
-    val mybatisScanAllXml: Boolean
-        get() = myState.mybatisScanAllXml ?: CallGraphAppSettings.getInstance().mybatisScanAllXml
+  // MyBatis
+  val mybatisScanAllXml: Boolean
+    get() = myState.mybatisScanAllXml ?: CallGraphAppSettings.getInstance().mybatisScanAllXml
 
-    val springEnableFullScan: Boolean
-        get() = myState.springEnableFullScan ?: CallGraphAppSettings.getInstance().springEnableFullScan
+  val springEnableFullScan: Boolean
+    get() = myState.springEnableFullScan ?: CallGraphAppSettings.getInstance().springEnableFullScan
 
-    // UI settings with fallback to app defaults
+  // UI settings with fallback to app defaults
 
-    val treeMaxDisplayDepth: Int
-        get() = myState.treeMaxDisplayDepth ?: CallGraphAppSettings.getInstance().treeMaxDisplayDepth
+  val treeMaxDisplayDepth: Int
+    get() = myState.treeMaxDisplayDepth ?: CallGraphAppSettings.getInstance().treeMaxDisplayDepth
 
-    val treeMaxChildrenPerNode: Int
-        get() =
-            myState.treeMaxChildrenPerNode ?: CallGraphAppSettings.getInstance().treeMaxChildrenPerNode
+  val treeMaxChildrenPerNode: Int
+    get() =
+        myState.treeMaxChildrenPerNode ?: CallGraphAppSettings.getInstance().treeMaxChildrenPerNode
 
-    val treeInitialExpandDepth: Int
-        get() =
-            myState.treeInitialExpandDepth ?: CallGraphAppSettings.getInstance().treeInitialExpandDepth
+  val treeInitialExpandDepth: Int
+    get() =
+        myState.treeInitialExpandDepth ?: CallGraphAppSettings.getInstance().treeInitialExpandDepth
 
-    fun setProjectMaxDepth(value: Int?) {
-        myState.projectMaxDepth = value
-    }
+  fun setProjectMaxDepth(value: Int?) {
+    myState.projectMaxDepth = value
+  }
 
-    fun setThirdPartyMaxDepth(value: Int?) {
-        myState.thirdPartyMaxDepth = value
-    }
+  fun setThirdPartyMaxDepth(value: Int?) {
+    myState.thirdPartyMaxDepth = value
+  }
 
-    fun setExcludePackagePatterns(patterns: List<String>?) {
-        myState.excludePackagePatterns = patterns?.toMutableList()
-    }
+  fun setExcludePackagePatterns(patterns: List<String>?) {
+    myState.excludePackagePatterns = patterns?.toMutableList()
+  }
 
-    fun setIncludeGettersSetters(value: Boolean?) {
-        myState.includeGettersSetters = value
-    }
+  fun setIncludeGettersSetters(value: Boolean?) {
+    myState.includeGettersSetters = value
+  }
 
-    fun setIncludeToString(value: Boolean?) {
-        myState.includeToString = value
-    }
+  fun setIncludeToString(value: Boolean?) {
+    myState.includeToString = value
+  }
 
-    fun setIncludeHashCodeEquals(value: Boolean?) {
-        myState.includeHashCodeEquals = value
-    }
+  fun setIncludeHashCodeEquals(value: Boolean?) {
+    myState.includeHashCodeEquals = value
+  }
 
-    fun setResolveInterfaceImplementations(value: Boolean?) {
-        myState.resolveInterfaceImplementations = value
-    }
+  fun setResolveInterfaceImplementations(value: Boolean?) {
+    myState.resolveInterfaceImplementations = value
+  }
 
-    fun setMybatisScanAllXml(value: Boolean?) {
-        myState.mybatisScanAllXml = value
-    }
+  fun setMybatisScanAllXml(value: Boolean?) {
+    myState.mybatisScanAllXml = value
+  }
 
-    fun setSpringEnableFullScan(value: Boolean?) {
-        myState.springEnableFullScan = value
-    }
+  fun setSpringEnableFullScan(value: Boolean?) {
+    myState.springEnableFullScan = value
+  }
 
-    companion object {
-        fun getInstance(project: Project): CallGraphProjectSettings = project.getService(CallGraphProjectSettings::class.java)
-    }
+  companion object {
+    fun getInstance(project: Project): CallGraphProjectSettings =
+        project.getService(CallGraphProjectSettings::class.java)
+  }
 }

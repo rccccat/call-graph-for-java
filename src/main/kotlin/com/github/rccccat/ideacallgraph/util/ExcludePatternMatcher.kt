@@ -8,11 +8,11 @@ import com.intellij.psi.PsiType
 
 private fun normalizeJavaLang(text: String): String = text.replace("java.lang.", "")
 
-class ExcludePatternMatcher private constructor(
+class ExcludePatternMatcher
+private constructor(
     private val entries: List<PatternEntry>,
 ) {
   private enum class Scope {
-    ANY,
     PACKAGE,
     CLASS,
     METHOD,
@@ -44,7 +44,14 @@ class ExcludePatternMatcher private constructor(
       if (trimmed.isEmpty()) {
         return ParseResult(null, "Pattern is empty")
       }
-      val (scope, regexText) = parseScope(trimmed)
+      val parsed = parseScope(trimmed)
+      if (parsed == null) {
+        return ParseResult(
+            null,
+            "Pattern must start with one of: pkg:, class:, method:, sig:",
+        )
+      }
+      val (scope, regexText) = parsed
       if (regexText.isBlank()) {
         return ParseResult(null, "Pattern is empty")
       }
@@ -59,13 +66,13 @@ class ExcludePatternMatcher private constructor(
       )
     }
 
-    private fun parseScope(raw: String): Pair<Scope, String> =
+    private fun parseScope(raw: String): Pair<Scope, String>? =
         when {
           raw.startsWith("pkg:") -> Scope.PACKAGE to raw.removePrefix("pkg:")
           raw.startsWith("class:") -> Scope.CLASS to raw.removePrefix("class:")
           raw.startsWith("method:") -> Scope.METHOD to raw.removePrefix("method:")
           raw.startsWith("sig:") -> Scope.SIGNATURE to raw.removePrefix("sig:")
-          else -> Scope.ANY to raw
+          else -> null
         }
   }
 
@@ -88,18 +95,6 @@ class ExcludePatternMatcher private constructor(
       val qualifiedMethodSignature: String,
       val qualifiedSignatureWithQualifiedParams: String?,
   ) {
-    val anyTargets: List<String> =
-        listOfNotNull(
-            packageName,
-            classQualifiedName,
-            className,
-            methodName,
-            methodSignature,
-            qualifiedMethodSignature,
-            qualifiedSignature,
-            qualifiedSignatureWithQualifiedParams,
-        )
-
     val classTargets: List<String> = listOfNotNull(classQualifiedName, className)
 
     val signatureTargets: List<String> =
@@ -167,11 +162,11 @@ class ExcludePatternMatcher private constructor(
 
   private fun PatternEntry.matches(targets: MethodTargets): Boolean =
       when (scope) {
-        Scope.ANY -> targets.anyTargets.any { target -> target == rawText || regex.matches(target) }
         Scope.PACKAGE ->
             targets.packageName?.let { target -> target == rawText || regex.matches(target) }
                 ?: false
-        Scope.CLASS -> targets.classTargets.any { target -> target == rawText || regex.matches(target) }
+        Scope.CLASS ->
+            targets.classTargets.any { target -> target == rawText || regex.matches(target) }
         Scope.METHOD -> targets.methodName == rawText || regex.matches(targets.methodName)
         Scope.SIGNATURE ->
             targets.signatureTargets.any { target ->
@@ -182,5 +177,4 @@ class ExcludePatternMatcher private constructor(
                   regex.matches(target)
             }
       }
-
 }

@@ -1,6 +1,6 @@
-# Call Graph Plugin for IntelliJ IDEA
+# Call Graph for Java
 
-An IntelliJ IDEA plugin for generating and visualizing call graphs from Java code. It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
+Call Graph for Java is an IntelliJ IDEA plugin for generating and visualizing call graphs from Java code. It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
 
 ## Features
 
@@ -80,7 +80,7 @@ com.github.rccccat.ideacallgraph/
 - **Service Layer**: Clean separation between IDE-specific and pure data models
 
 <!-- Plugin description -->
-A call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
+Call Graph for Java is a call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
 <!-- Plugin description end -->
 
 ## Usage
@@ -133,7 +133,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 
 - Using the IDE built-in plugin system:
 
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "Call Graph Plugin"</kbd> >
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "Call Graph for Java"</kbd> >
   <kbd>Install</kbd>
 
 - Manually:
@@ -143,7 +143,7 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 
 ## Requirements
 
-- IntelliJ IDEA 2024.3 or later
+- IntelliJ IDEA 2023.1 or later (build 231+)
 - Java projects
 - Project indexing must be complete for accurate analysis
 
@@ -178,12 +178,16 @@ A call graph analysis tool for IntelliJ IDEA that generates interactive visualiz
 
 # Verify plugin compatibility
 ./gradlew verifyPlugin
+
+# Verify using a local IDE distribution (optional)
+./gradlew verifyPlugin -PlocalIdePath="/Applications/IntelliJ IDEA CE.app"
 ```
 
 ### Tech Stack
 
-- Kotlin for implementation
-- IntelliJ Platform SDK 2024.3+
+- Kotlin 2.2.x
+- IntelliJ Platform SDK 2023.1+
+- JDK 17 toolchain
 - Gradle with Kotlin DSL
 - Gson for JSON serialization
 

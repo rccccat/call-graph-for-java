@@ -26,211 +26,210 @@ class SpringApiScanner(
     private val project: Project,
     private val cacheManager: CallGraphCacheManager,
 ) {
-    private val scanIndicator = ThreadLocal<ProgressIndicator?>()
-    private val controllerAnnotationClassesCache =
-        cacheManager.createCachedValue {
-            val javaPsiFacade = JavaPsiFacade.getInstance(project)
-            val classes =
-                collectControllerAnnotationClasses(
-                    javaPsiFacade,
-                    GlobalSearchScope.projectScope(project),
-                    resolveIndicator(),
-                )
-            toSmartPointerList(project, classes)
-        }
-    private val fullScanBatchSize = 200
+  private val scanIndicator = ThreadLocal<ProgressIndicator?>()
+  private val controllerAnnotationClassesCache =
+      cacheManager.createCachedValue {
+        val javaPsiFacade = JavaPsiFacade.getInstance(project)
+        val classes =
+            collectControllerAnnotationClasses(
+                javaPsiFacade,
+                GlobalSearchScope.projectScope(project),
+                resolveIndicator(),
+            )
+        toSmartPointerList(project, classes)
+      }
+  private val fullScanBatchSize = 200
 
-    private val controllerClassesCache =
-        cacheManager.createCachedValue {
-            val scope = GlobalSearchScope.projectScope(project)
-            val annotationClasses = resolveValidPointers(controllerAnnotationClassesCache.value)
-            val classes =
-                collectControllerClasses(
-                    annotationClasses,
-                    scope,
-                    resolveIndicator(),
-                )
-            toSmartPointerList(project, classes)
-        }
-    private val endpointsCache =
-        cacheManager.createCachedValue {
-            val endpoints = scanAllEndpointsInternal(resolveIndicator())
-            toSmartPointerList(project, endpoints)
-        }
+  private val controllerClassesCache =
+      cacheManager.createCachedValue {
+        val scope = GlobalSearchScope.projectScope(project)
+        val annotationClasses = resolveValidPointers(controllerAnnotationClassesCache.value)
+        val classes =
+            collectControllerClasses(
+                annotationClasses,
+                scope,
+                resolveIndicator(),
+            )
+        toSmartPointerList(project, classes)
+      }
+  private val endpointsCache =
+      cacheManager.createCachedValue {
+        val endpoints = scanAllEndpointsInternal(resolveIndicator())
+        toSmartPointerList(project, endpoints)
+      }
 
-    /**
-     * Scans the project for all Spring API endpoint methods.
-     *
-     * @param indicator Progress indicator for showing progress and supporting cancellation
-     * @return List of PsiMethod objects representing API endpoints
-     */
-    fun scanAllEndpoints(indicator: ProgressIndicator): List<PsiMethod> {
-        scanIndicator.set(indicator)
-        try {
-            val endpoints = resolveValidPointers(endpointsCache.value)
-            indicator.text = "Found ${endpoints.size} API endpoints"
-            indicator.fraction = 1.0
-            return endpoints
-        } finally {
-            scanIndicator.remove()
-        }
+  /**
+   * Scans the project for all Spring API endpoint methods.
+   *
+   * @param indicator Progress indicator for showing progress and supporting cancellation
+   * @return List of PsiMethod objects representing API endpoints
+   */
+  fun scanAllEndpoints(indicator: ProgressIndicator): List<PsiMethod> {
+    scanIndicator.set(indicator)
+    try {
+      val endpoints = resolveValidPointers(endpointsCache.value)
+      indicator.text = "Found ${endpoints.size} API endpoints"
+      indicator.fraction = 1.0
+      return endpoints
+    } finally {
+      scanIndicator.remove()
+    }
+  }
+
+  private fun resolveIndicator(): ProgressIndicator =
+      scanIndicator.get() ?: EmptyProgressIndicator()
+
+  private fun forEachClassInBatches(
+      scope: GlobalSearchScope,
+      indicator: ProgressIndicator,
+      process: (PsiClass) -> Unit,
+  ) {
+    val query = AllClassesSearch.search(scope, project)
+    val iterator = ReadAction.compute<Iterator<PsiClass>, Exception> { query.iterator() }
+    indicator.isIndeterminate = true
+
+    while (true) {
+      val processedInBatch =
+          ReadAction.compute<Int, Exception> {
+            var count = 0
+            while (iterator.hasNext() && count < fullScanBatchSize) {
+              process(iterator.next())
+              count++
+            }
+            count
+          }
+      if (processedInBatch == 0) break
+      indicator.checkCanceled()
     }
 
-    private fun resolveIndicator(): ProgressIndicator = scanIndicator.get() ?: EmptyProgressIndicator()
+    indicator.isIndeterminate = false
+  }
 
-    private fun forEachClassInBatches(
-        scope: GlobalSearchScope,
-        indicator: ProgressIndicator,
-        process: (PsiClass) -> Unit,
-    ) {
-        val query = AllClassesSearch.search(scope, project)
-        val iterator = ReadAction.compute<Iterator<PsiClass>, Exception> { query.iterator() }
-        indicator.isIndeterminate = true
+  private fun scanAllEndpointsInternal(indicator: ProgressIndicator): List<PsiMethod> {
+    val endpoints = mutableListOf<PsiMethod>()
+    val controllerClasses = resolveValidPointers(controllerClassesCache.value)
+    indicator.text = "Scanning Spring controller methods..."
+    indicator.isIndeterminate = false
 
-        while (true) {
-            val processedInBatch =
-                ReadAction.compute<Int, Exception> {
-                    var count = 0
-                    while (iterator.hasNext() && count < fullScanBatchSize) {
-                        process(iterator.next())
-                        count++
-                    }
-                    count
-                }
-            if (processedInBatch == 0) break
-            indicator.checkCanceled()
-        }
-
-        indicator.isIndeterminate = false
+    for ((index, controllerClass) in controllerClasses.withIndex()) {
+      indicator.checkCanceled()
+      indicator.fraction =
+          if (controllerClasses.isNotEmpty()) {
+            0.6 + (index + 1).toDouble() / controllerClasses.size * 0.4
+          } else {
+            0.6
+          }
+      ReadAction.compute<Unit, Exception> {
+        extractEndpointsFromController(controllerClass, endpoints)
+      }
     }
 
-    private fun scanAllEndpointsInternal(indicator: ProgressIndicator): List<PsiMethod> {
-        val endpoints = mutableListOf<PsiMethod>()
-        val controllerClasses = resolveValidPointers(controllerClassesCache.value)
-        indicator.text = "Scanning Spring controller methods..."
-        indicator.isIndeterminate = false
+    indicator.text = "Found ${endpoints.size} API endpoints"
+    indicator.fraction = 1.0
 
-        for ((index, controllerClass) in controllerClasses.withIndex()) {
-            indicator.checkCanceled()
-            indicator.fraction =
-                if (controllerClasses.isNotEmpty()) {
-                    0.6 + (index + 1).toDouble() / controllerClasses.size * 0.4
-                } else {
-                    0.6
-                }
-            ReadAction.compute<Unit, Exception> {
-                extractEndpointsFromController(controllerClass, endpoints)
-            }
-        }
+    return endpoints
+  }
 
-        indicator.text = "Found ${endpoints.size} API endpoints"
-        indicator.fraction = 1.0
+  /** Extracts all API endpoint methods from a controller class. */
+  private fun extractEndpointsFromController(
+      controllerClass: PsiClass,
+      endpoints: MutableList<PsiMethod>,
+  ) {
+    for (method in controllerClass.methods) {
+      if (hasMappingOnMethodOrSuper(method)) {
+        endpoints.add(method)
+      }
+    }
+  }
 
-        return endpoints
+  private fun collectControllerAnnotationClasses(
+      javaPsiFacade: JavaPsiFacade,
+      scope: GlobalSearchScope,
+      indicator: ProgressIndicator,
+  ): List<PsiClass> {
+    val result = LinkedHashSet<PsiClass>()
+    val queue = ArrayDeque<PsiClass>()
+
+    for ((index, annotationQualifiedName) in
+        SpringAnnotations.controllerAnnotationQualifiedNames.withIndex()) {
+      indicator.checkCanceled()
+      indicator.fraction =
+          index.toDouble() / SpringAnnotations.controllerAnnotationQualifiedNames.size * 0.2
+
+      val annotationClass =
+          ReadAction.compute<PsiClass?, Exception> {
+            // Use allScope to find annotation classes defined in Spring libraries
+            javaPsiFacade.findClass(
+                annotationQualifiedName,
+                GlobalSearchScope.allScope(project),
+            )
+          } ?: continue
+      if (result.add(annotationClass)) {
+        queue.add(annotationClass)
+      }
     }
 
-    /** Extracts all API endpoint methods from a controller class. */
-    private fun extractEndpointsFromController(
-        controllerClass: PsiClass,
-        endpoints: MutableList<PsiMethod>,
-    ) {
-        for (method in controllerClass.methods) {
-            if (hasMappingOnMethodOrSuper(method)) {
-                endpoints.add(method)
-            }
+    while (queue.isNotEmpty()) {
+      indicator.checkCanceled()
+      val current = queue.removeFirst()
+      val annotatedClasses = findAnnotatedClasses(current, scope)
+      for (candidate in annotatedClasses) {
+        if (!candidate.isAnnotationType) continue
+        if (result.add(candidate)) {
+          queue.add(candidate)
         }
+      }
     }
 
-    private fun collectControllerAnnotationClasses(
-        javaPsiFacade: JavaPsiFacade,
-        scope: GlobalSearchScope,
-        indicator: ProgressIndicator,
-    ): List<PsiClass> {
-        val result = LinkedHashSet<PsiClass>()
-        val queue = ArrayDeque<PsiClass>()
-
-        for (
-        (index, annotationQualifiedName) in
-        SpringAnnotations.controllerAnnotationQualifiedNames.withIndex()
-        ) {
-            indicator.checkCanceled()
-            indicator.fraction =
-                index.toDouble() / SpringAnnotations.controllerAnnotationQualifiedNames.size * 0.2
-
-            val annotationClass =
-                ReadAction.compute<PsiClass?, Exception> {
-                    // Use allScope to find annotation classes defined in Spring libraries
-                    javaPsiFacade.findClass(
-                        annotationQualifiedName,
-                        GlobalSearchScope.allScope(project),
-                    )
-                } ?: continue
-            if (result.add(annotationClass)) {
-                queue.add(annotationClass)
-            }
+    val settings = CallGraphProjectSettings.getInstance(project)
+    if (settings.springEnableFullScan) {
+      indicator.text = "Full scan: searching Spring controller annotations..."
+      forEachClassInBatches(scope, indicator) { candidate ->
+        if (!candidate.isAnnotationType) return@forEachClassInBatches
+        if (hasAnyAnnotationOrMeta(candidate, SpringAnnotations.controllerAnnotations)) {
+          result.add(candidate)
         }
-
-        while (queue.isNotEmpty()) {
-            indicator.checkCanceled()
-            val current = queue.removeFirst()
-            val annotatedClasses = findAnnotatedClasses(current, scope)
-            for (candidate in annotatedClasses) {
-                if (!candidate.isAnnotationType) continue
-                if (result.add(candidate)) {
-                    queue.add(candidate)
-                }
-            }
-        }
-
-        val settings = CallGraphProjectSettings.getInstance(project)
-        if (settings.springEnableFullScan) {
-            indicator.text = "Full scan: searching Spring controller annotations..."
-            forEachClassInBatches(scope, indicator) { candidate ->
-                if (!candidate.isAnnotationType) return@forEachClassInBatches
-                if (hasAnyAnnotationOrMeta(candidate, SpringAnnotations.controllerAnnotations)) {
-                    result.add(candidate)
-                }
-            }
-        }
-
-        return result.toList()
+      }
     }
 
-    private fun collectControllerClasses(
-        controllerAnnotationClasses: List<PsiClass>,
-        scope: GlobalSearchScope,
-        indicator: ProgressIndicator,
-    ): List<PsiClass> {
-        val result = LinkedHashSet<PsiClass>()
-        indicator.text = "Scanning Spring controllers..."
-        indicator.isIndeterminate = false
-        for ((index, annotationClass) in controllerAnnotationClasses.withIndex()) {
-            indicator.checkCanceled()
-            indicator.fraction =
-                if (controllerAnnotationClasses.isNotEmpty()) {
-                    index.toDouble() / controllerAnnotationClasses.size * 0.6
-                } else {
-                    0.0
-                }
+    return result.toList()
+  }
 
-            val annotatedClasses = findAnnotatedClasses(annotationClass, scope)
-            for (candidate in annotatedClasses) {
-                if (!candidate.isAnnotationType) {
-                    result.add(candidate)
-                }
-            }
-        }
+  private fun collectControllerClasses(
+      controllerAnnotationClasses: List<PsiClass>,
+      scope: GlobalSearchScope,
+      indicator: ProgressIndicator,
+  ): List<PsiClass> {
+    val result = LinkedHashSet<PsiClass>()
+    indicator.text = "Scanning Spring controllers..."
+    indicator.isIndeterminate = false
+    for ((index, annotationClass) in controllerAnnotationClasses.withIndex()) {
+      indicator.checkCanceled()
+      indicator.fraction =
+          if (controllerAnnotationClasses.isNotEmpty()) {
+            index.toDouble() / controllerAnnotationClasses.size * 0.6
+          } else {
+            0.0
+          }
 
-        val settings = CallGraphProjectSettings.getInstance(project)
-        if (settings.springEnableFullScan) {
-            indicator.text = "Full scan: searching Spring controller classes..."
-            forEachClassInBatches(scope, indicator) { candidate ->
-                if (candidate.isAnnotationType) return@forEachClassInBatches
-                if (hasAnyAnnotationOrMeta(candidate, SpringAnnotations.controllerAnnotations)) {
-                    result.add(candidate)
-                }
-            }
+      val annotatedClasses = findAnnotatedClasses(annotationClass, scope)
+      for (candidate in annotatedClasses) {
+        if (!candidate.isAnnotationType) {
+          result.add(candidate)
         }
-        return result.toList()
+      }
     }
+
+    val settings = CallGraphProjectSettings.getInstance(project)
+    if (settings.springEnableFullScan) {
+      indicator.text = "Full scan: searching Spring controller classes..."
+      forEachClassInBatches(scope, indicator) { candidate ->
+        if (candidate.isAnnotationType) return@forEachClassInBatches
+        if (hasAnyAnnotationOrMeta(candidate, SpringAnnotations.controllerAnnotations)) {
+          result.add(candidate)
+        }
+      }
+    }
+    return result.toList()
+  }
 }

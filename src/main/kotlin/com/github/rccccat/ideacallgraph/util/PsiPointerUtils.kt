@@ -9,17 +9,18 @@ fun <T : PsiElement> toSmartPointer(
     project: Project,
     element: T,
 ): SmartPsiElementPointer<T> {
-    val manager = SmartPointerManager.getInstance(project)
-    return manager.createSmartPsiElementPointer(element)
+  val manager = SmartPointerManager.getInstance(project)
+  return manager.createSmartPsiElementPointer(element)
 }
 
 fun <T : PsiElement> toSmartPointerList(
     project: Project,
     elements: Collection<T>,
 ): List<SmartPsiElementPointer<T>> {
-    val manager = SmartPointerManager.getInstance(project)
-    return elements.map { element -> manager.createSmartPsiElementPointer(element) }
+  val manager = SmartPointerManager.getInstance(project)
+  return elements.map { element -> manager.createSmartPsiElementPointer(element) }
 }
 
-fun <T : PsiElement> resolveValidPointers(pointers: Collection<SmartPsiElementPointer<T>>): List<T> =
-    pointers.mapNotNull { pointer -> pointer.element }
+fun <T : PsiElement> resolveValidPointers(
+    pointers: Collection<SmartPsiElementPointer<T>>
+): List<T> = pointers.mapNotNull { pointer -> pointer.element }

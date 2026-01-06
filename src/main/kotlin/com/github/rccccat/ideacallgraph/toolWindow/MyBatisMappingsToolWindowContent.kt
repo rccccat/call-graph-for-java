@@ -4,8 +4,8 @@ import com.github.rccccat.ideacallgraph.api.model.NodeType
 import com.github.rccccat.ideacallgraph.export.MyBatisMapperScanner
 import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraphNode
-import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
+import com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeNavigator
 import com.github.rccccat.ideacallgraph.ui.CallGraphNodeText
 import com.intellij.notification.NotificationGroupManager

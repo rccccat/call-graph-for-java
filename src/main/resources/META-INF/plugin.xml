@@ -1,8 +1,8 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.rccccat.ideacallgraph</id>
-    <name>idea-call-graph</name>
-    <vendor>Idea Call Graph</vendor>
+    <name>Call Graph for Java</name>
+    <vendor>Call Graph for Java</vendor>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>

@@ -17,8 +17,10 @@ group = providers.gradleProperty("pluginGroup").get()
 
 version = providers.gradleProperty("pluginVersion").get()
 
+val localIdePath = providers.gradleProperty("localIdePath").orNull?.takeIf { it.isNotBlank() }
+
 // Set the JVM language level used to build the project.
-kotlin { jvmToolchain(21) }
+kotlin { jvmToolchain(17) }
 
 // Configure project's dependencies
 repositories {
@@ -41,7 +43,11 @@ dependencies {
   // IntelliJ Platform Gradle Plugin Dependencies Extension - read more:
   // https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
   intellijPlatform {
-    create(providers.gradleProperty("platformType"), providers.gradleProperty("platformVersion"))
+    if (localIdePath == null) {
+      intellijIdea(providers.gradleProperty("platformVersion"))
+    } else {
+      local(localIdePath)
+    }
 
     // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file
     // for bundled IntelliJ Platform plugins.
@@ -118,7 +124,15 @@ intellijPlatform {
         }
   }
 
-  pluginVerification { ides { recommended() } }
+  pluginVerification {
+    ides {
+      if (localIdePath == null) {
+        recommended()
+      } else {
+        local(file(localIdePath))
+      }
+    }
+  }
 }
 
 // Configure Gradle Changelog Plugin - read more:

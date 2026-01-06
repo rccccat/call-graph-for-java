@@ -59,7 +59,8 @@ class InterfaceResolverScopeTest : BasePlatformTestCase() {
 
     val externalFile =
         LocalFileSystem.getInstance()
-            .refreshAndFindFileByPath(externalLibraryRoot.resolve("external/ExternalMap.java").toString())
+            .refreshAndFindFileByPath(
+                externalLibraryRoot.resolve("external/ExternalMap.java").toString())
     assertNotNull("ExternalMap source should exist in library root", externalFile)
 
     val graph = buildGraph(findHandleMethod(file))

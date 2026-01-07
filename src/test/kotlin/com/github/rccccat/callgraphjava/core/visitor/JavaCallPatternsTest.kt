@@ -41,6 +41,7 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
 
   /** 测试简单的方法链调用：builder.setA().setB().build() 预期边: handle → setA, handle → setB, handle → build */
   fun testMethodChainCall() {
+    updateSettings { excludePackagePatterns = mutableListOf() }
     val file =
         myFixture.addFileToProject(
             "src/demo/MethodChain.java",
@@ -658,6 +659,7 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
 
   /** 测试 try-catch-finally 中的方法调用 预期边: handle → open, handle → use, handle → close */
   fun testTryCatchFinallyMethodCalls() {
+    updateSettings { excludePackagePatterns = mutableListOf() }
     val file =
         myFixture.addFileToProject(
             "src/demo/TryCatchFinally.java",
@@ -855,7 +857,10 @@ class JavaCallPatternsTest : BasePlatformTestCase() {
 
   /** 测试 while 循环中的方法调用 预期边: handle → hasNext, handle → next */
   fun testWhileLoopMethodCall() {
-    updateSettings { includeGettersSetters = true }
+    updateSettings {
+      includeGettersSetters = true
+      excludePackagePatterns = mutableListOf()
+    }
     val file =
         myFixture.addFileToProject(
             "src/demo/WhileLoopCall.java",

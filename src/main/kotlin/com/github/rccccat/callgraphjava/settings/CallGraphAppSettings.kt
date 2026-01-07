@@ -15,36 +15,27 @@ class CallGraphAppSettings : PersistentStateComponent<CallGraphAppSettings.State
       var thirdPartyMaxDepth: Int = 1,
       var excludePackagePatterns: MutableList<String> =
           mutableListOf(
-              // ===== 包排除：标准库 =====
               """pkg:java\..*""",
               """pkg:javax\..*""",
               """pkg:kotlin\..*""",
               """pkg:kotlinx\..*""",
-              // ===== 包排除：常见框架 =====
               """pkg:org\.springframework\..*""",
               """pkg:org\.apache\..*""",
               """pkg:org\.slf4j\..*""",
               """pkg:ch\.qos\.logback\..*""",
               """pkg:com\.google\.common\..*""",
               """pkg:com\.fasterxml\..*""",
-              // ===== 包排除：异常类 =====
               """pkg:.*exception.*""",
-              // ===== 方法排除：Object 基础方法 =====
+              """pkg:com\.kuaishou\.framework\.util""",
               """method:(toString|hashCode|equals|clone|finalize|getClass|notify|notifyAll|wait)""",
-              // ===== 方法排除：日志方法 =====
-              """method:(log|debug|info|error|warn|trace|fatal)""",
+              """method:(log|debug|info|error|warn|trace|fatal|perf)""",
               """method:(printStackTrace|print|printf|println)""",
-              // ===== 方法排除：性能和时间测量 =====
               """method:(nanoTime|currentTimeMillis|elapsedTime|startTimer|stopTimer)""",
-              // ===== 方法排除：集合基础操作 =====
               """method:(size|isEmpty|iterator|hasNext|next|stream|parallelStream)""",
-              // ===== 方法排除：字符串操作 =====
               """method:(length|charAt|substring|indexOf|trim|split|concat|replace)""",
-              // ===== 方法排除：Builder 模式 =====
               """method:(build|builder)""",
-              // ===== 方法排除：断言和验证 =====
-              """method:(assert.*|require.*|check.*|validate)""",
-              // ===== 方法排除：资源管理（对象生命周期） =====
+              """class:.*Builder""",
+              """method:(assert.*|validate)""",
               """method:(close|dispose|destroy|shutdown|cleanup)""",
           ),
       var includeGettersSetters: Boolean = false,

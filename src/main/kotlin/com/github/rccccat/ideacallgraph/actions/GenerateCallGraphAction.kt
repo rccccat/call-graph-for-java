@@ -3,6 +3,7 @@ package com.github.rccccat.ideacallgraph.actions
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraph
 import com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl
 import com.github.rccccat.ideacallgraph.toolWindow.CallGraphToolWindowContent
+import com.github.rccccat.ideacallgraph.util.isProjectCode
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.actionSystem.ActionUpdateThread
@@ -50,11 +51,17 @@ class GenerateCallGraphAction : AnAction("Generate Call Graph") {
         }
 
     if (targetElement == null) {
-      showNotification(project, "Please place cursor on a method", NotificationType.WARNING)
+      showNotification(project, "请将光标放在方法上", NotificationType.WARNING)
+      return
+    }
+
+    if (!isProjectCode(project, targetElement)) {
+      showNotification(project, "仅支持从项目源码方法生成调用图", NotificationType.WARNING)
       return
     }
 
     // Generate call graph in background
+
     ProgressManager.getInstance()
         .run(
             object : Task.Backgroundable(project, "Generating call graph", true) {

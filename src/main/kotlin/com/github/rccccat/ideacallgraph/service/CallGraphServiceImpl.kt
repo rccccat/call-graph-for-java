@@ -13,6 +13,7 @@ import com.github.rccccat.ideacallgraph.framework.mybatis.MyBatisAnalyzer
 import com.github.rccccat.ideacallgraph.framework.spring.SpringAnalyzer
 import com.github.rccccat.ideacallgraph.ide.model.IdeCallGraph
 import com.github.rccccat.ideacallgraph.ide.psi.PsiNodeFactory
+import com.github.rccccat.ideacallgraph.util.isProjectCode
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
@@ -22,7 +23,6 @@ import com.intellij.psi.PsiElement
 class CallGraphServiceImpl(
     private val project: Project,
 ) : CallGraphService {
-
   private val cacheManager = CallGraphCacheManager.getInstance(project)
   private val springAnalyzer = SpringAnalyzer()
   private val visitor = JavaCallVisitor()
@@ -34,6 +34,9 @@ class CallGraphServiceImpl(
   private val codeExtractor = CodeExtractor()
 
   override fun buildCallGraph(startElement: PsiElement): IdeCallGraph? {
+    if (!isProjectCode(project, startElement)) {
+      return null
+    }
     val builder =
         CallGraphBuilder(
             project = project,
@@ -57,9 +60,7 @@ class CallGraphServiceImpl(
     return jsonExporter.exportToJsonCompact(callGraph.data, codeMap)
   }
 
-  override fun getData(callGraph: IdeCallGraph): CallGraphData {
-    return callGraph.data
-  }
+  override fun getData(callGraph: IdeCallGraph): CallGraphData = callGraph.data
 
   fun resetCaches() {
     cacheManager.invalidateAll()

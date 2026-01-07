@@ -143,7 +143,7 @@ Call Graph for Java is a call graph analysis tool for IntelliJ IDEA that generat
 
 ## Requirements
 
-- IntelliJ IDEA 2023.1 or later (build 231+)
+- IntelliJ IDEA 2023.1 or later (build 241+)
 - Java projects
 - Project indexing must be complete for accurate analysis
 

@@ -7,14 +7,13 @@ import com.intellij.openapi.progress.ProgressManager
 
 /** Depth-first traversal implementation for call graph building. */
 class DepthFirstTraverser {
-
   fun traverse(
       rootNode: CallGraphNodeData,
       findCallTargets: (nodeId: String) -> List<TraversalTarget>,
       settings: CallGraphProjectSettings,
   ): CallGraphData {
     val nodes = mutableMapOf(rootNode.id to rootNode)
-    val outgoingByFromId = mutableMapOf<String, MutableList<String>>()
+    val outgoingByFromId = mutableMapOf<String, MutableSet<String>>()
     val visitedDepth = mutableMapOf<String, Int>()
 
     traverseRecursive(
@@ -38,7 +37,7 @@ class DepthFirstTraverser {
   private fun traverseRecursive(
       currentNode: CallGraphNodeData,
       nodes: MutableMap<String, CallGraphNodeData>,
-      outgoingByFromId: MutableMap<String, MutableList<String>>,
+      outgoingByFromId: MutableMap<String, MutableSet<String>>,
       visitedDepth: MutableMap<String, Int>,
       remainingDepth: Int,
       isProjectCode: Boolean,
@@ -82,16 +81,16 @@ class DepthFirstTraverser {
       fromId: String,
       target: TraversalTarget,
       nodes: MutableMap<String, CallGraphNodeData>,
-      outgoingByFromId: MutableMap<String, MutableList<String>>,
+      outgoingByFromId: MutableMap<String, MutableSet<String>>,
   ) {
     nodes[target.node.id] = target.node
-    outgoingByFromId.getOrPut(fromId) { mutableListOf() }.add(target.node.id)
+    outgoingByFromId.getOrPut(fromId) { LinkedHashSet() }.add(target.node.id)
   }
 
   private fun traverseIfNeeded(
       targetNode: CallGraphNodeData,
       nodes: MutableMap<String, CallGraphNodeData>,
-      outgoingByFromId: MutableMap<String, MutableList<String>>,
+      outgoingByFromId: MutableMap<String, MutableSet<String>>,
       visitedDepth: MutableMap<String, Int>,
       remainingDepth: Int,
       currentIsProjectCode: Boolean,

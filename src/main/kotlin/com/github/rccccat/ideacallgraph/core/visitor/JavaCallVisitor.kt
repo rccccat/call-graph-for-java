@@ -47,7 +47,7 @@ class JavaCallVisitor {
                   resolveResult.element as? PsiMethod
                 } else {
                   null
-                }
+                } ?: expression.resolveMethod()
             val targetMethod = resolvedMethod
 
             if (targetMethod != null) {
@@ -77,10 +77,15 @@ class JavaCallVisitor {
             super.visitMethodReferenceExpression(expression)
 
             val resolvedMethod = expression.resolve() as? PsiMethod ?: return
+            val isSuperReference = expression.qualifierExpression is PsiSuperExpression
 
             // For method references, we don't have a traditional injection point
             val implementations =
-                resolveOverrideImplementationsIfNeeded(resolvedMethod, null, context)
+                if (isSuperReference) {
+                  null
+                } else {
+                  resolveOverrideImplementationsIfNeeded(resolvedMethod, null, context)
+                }
             callTargets.add(CallTargetInfo(resolvedMethod, implementations, expression))
           }
         },

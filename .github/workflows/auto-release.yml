@@ -1,46 +1,188 @@
-name: Auto Build & Release
+name: Build & Release
 
 on:
   push:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'LICENSE'
-      - '.github/**'
-  workflow_dispatch:
+  pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-release:
-    name: Build and Release Plugin
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - name: Fetch Sources
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Build plugin
+        run: ./gradlew buildPlugin
+
+      - name: Prepare Plugin Artifact
+        id: artifact
+        shell: bash
+        run: |
+          cd ${{ github.workspace }}/build/distributions
+          FILENAME=`ls *.zip`
+          unzip "$FILENAME" -d content
+
+          echo "filename=${FILENAME:0:-4}" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: ${{ steps.artifact.outputs.filename }}
+          path: ./build/distributions/content/*/*
+
+  test:
+    name: Test
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - name: Fetch Sources
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Run Tests
+        run: ./gradlew check
+
+      - name: Collect Tests Result
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: tests-result
+          path: ${{ github.workspace }}/build/reports/tests
+
+      - name: Upload Code Coverage Report
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ github.workspace }}/build/reports/kover/report.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  inspectCode:
+    name: Inspect code
+    needs: [ build ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: read
-
+      checks: write
+      pull-requests: write
     steps:
+      - name: Maximize Build Space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: zulu
-          java-version: 21
+          java-version: 17
+
+      - name: Qodana - Code Inspection
+        uses: JetBrains/qodana-action@v2025.1.1
+        with:
+          cache-default-branch-only: true
+
+  verify:
+    name: Verify plugin
+    needs: [ build ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - name: Fetch Sources
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 17
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Run Plugin Verification tasks
+        run: ./gradlew verifyPlugin
+
+      - name: Collect Plugin Verifier Result
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: pluginVerifier-result
+          path: ${{ github.workspace }}/build/reports/pluginVerifier
+
+  release:
+    name: Release
+    if: github.event_name != 'pull_request'
+    needs: [ build, test, inspectCode, verify ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch Sources
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
 
       - name: Build Plugin
         run: ./gradlew buildPlugin
-
-      - name: Run Tests
-        run: ./gradlew test
-        continue-on-error: true
 
       - name: Get Version and Commit Info
         id: version
@@ -61,39 +203,32 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.TAG_NAME }}
-          name: "Call Graph Plugin ${{ steps.version.outputs.VERSION }} - ${{ steps.version.outputs.COMMIT_SHORT }}"
+          name: "Call Graph for Java ${{ steps.version.outputs.VERSION }} - ${{ steps.version.outputs.COMMIT_SHORT }}"
           body: |
-            ## 📦 IntelliJ Call Graph Plugin - Auto Release
+            ## 📦 Call Graph for Java - 自动发布
 
-            **Version:** `${{ steps.version.outputs.VERSION }}`
-            **Commit:** [`${{ steps.version.outputs.COMMIT_SHORT }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
-            **Build Time:** `${{ steps.version.outputs.TIMESTAMP }}`
-            **Commit Message:** ${{ github.event.head_commit.message }}
+            **版本:** `${{ steps.version.outputs.VERSION }}`
+            **提交:** [`${{ steps.version.outputs.COMMIT_SHORT }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+            **构建时间:** `${{ steps.version.outputs.TIMESTAMP }}`
+            **提交信息:** ${{ github.event.head_commit.message }}
 
 
-            ### 📥 Installation:
-            1. Download `idea-call-graph-${{ steps.version.outputs.VERSION }}.zip` below
+            ### 📥 安装方法:
+            1. 下载下方的 `call-graph-for-java-${{ steps.version.outputs.VERSION }}.zip`
             2. IntelliJ IDEA → `Settings` → `Plugins` → `⚙️ Install from Disk`
-            3. Select the zip file and restart IDE
+            3. 选择 zip 文件并重启 IDE
 
-            ### 🔧 Quick Start:
-            - Right-click any method → **"Generate Call Graph"**
-            - Configure: `Settings` → `Tools` → `Call Graph`
+            ### 🔧 快速开始:
+            - 右键点击任意方法 → **「生成调用图」**
+            - 配置: `Settings` → `Tools` → `Call Graph`
 
             ---
-            *🤖 This is an automated release triggered by commit to main branch*
+            *🤖 此发布由推送到 main 分支自动触发*
           files: build/distributions/*.zip
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT_SHORT }}
-          path: build/distributions/*.zip
-          retention-days: 30
 
       - name: Build Summary
         if: always()

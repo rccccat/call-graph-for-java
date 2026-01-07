@@ -1,6 +1,5 @@
-<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.rccccat.ideacallgraph</id>
+    <id>com.github.rccccat.callgraphjava</id>
     <name>Call Graph for Java</name>
     <vendor>Call Graph for Java</vendor>
 
@@ -8,24 +7,22 @@
     <depends>com.intellij.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.rccccat.ideacallgraph.toolWindow.MyToolWindowFactory" id="Call Graph"/>
+        <toolWindow factoryClass="com.github.rccccat.callgraphjava.toolWindow.MyToolWindowFactory" id="Call Graph"/>
         <projectConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings"
-                             instance="com.github.rccccat.ideacallgraph.settings.CallGraphConfigurable"/>
+                             instance="com.github.rccccat.callgraphjava.settings.CallGraphConfigurable"/>
         <notificationGroup id="Call Graph" displayType="BALLOON" isLogByDefault="false"/>
 
-        <!-- Application-level services -->
-        <applicationService serviceImplementation="com.github.rccccat.ideacallgraph.settings.CallGraphAppSettings"/>
+        <applicationService serviceImplementation="com.github.rccccat.callgraphjava.settings.CallGraphAppSettings"/>
 
-        <!-- Project-level services -->
-        <projectService serviceImplementation="com.github.rccccat.ideacallgraph.service.CallGraphServiceImpl"/>
-        <projectService serviceImplementation="com.github.rccccat.ideacallgraph.settings.CallGraphProjectSettings"/>
+        <projectService serviceImplementation="com.github.rccccat.callgraphjava.service.CallGraphServiceImpl"/>
+        <projectService serviceImplementation="com.github.rccccat.callgraphjava.settings.CallGraphProjectSettings"/>
     </extensions>
 
     <actions>
         <action id="GenerateCallGraph"
-                class="com.github.rccccat.ideacallgraph.actions.GenerateCallGraphAction"
-                text="Generate Call Graph"
-                description="Generate call graph for the selected method or function">
+                class="com.github.rccccat.callgraphjava.actions.GenerateCallGraphAction"
+                text="生成调用图"
+                description="为选中的方法生成调用图">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt G"/>
         </action>

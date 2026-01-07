@@ -1,189 +1,189 @@
 # Call Graph for Java
 
-Call Graph for Java is an IntelliJ IDEA plugin for generating and visualizing call graphs from Java code. It helps trace method invocation chains, resolve Spring dependency injection, and connect MyBatis mapper methods to SQL statements.
+Call Graph for Java 是一个 IntelliJ IDEA 插件，用于从 Java 代码生成和可视化调用图。它可以追踪方法调用链、解析 Spring 依赖注入，并将 MyBatis Mapper 方法关联到 SQL 语句。
 
-## Features
+## 功能特性
 
-- **Java support**: Build call graphs from `PsiMethod`
-- **Interactive call graph tree**: Expandable tree with depth and child limits
-- **Spring-aware analysis**: Controllers/services/endpoints, DI-aware interface resolution, `@Qualifier`/`@Primary`
-- **MyBatis integration**: Detect mapper interfaces from annotations/XML and add SQL statement nodes
-- **Spring APIs browser**: List endpoints with search and export filtered call graphs to JSONL
-- **MyBatis mappings browser**: Browse SQL mappings and jump to mapper/XML
-- **JSON export with code**: Pretty/compact JSON including each node's self code
-- **Navigation and context actions**: Double-click navigation, copy signatures, view method details
-- **Configurable analysis**: Depth limits, exclude patterns (package/class/method/signature), method filters, interface resolution, MyBatis XML scan
-- **Background tasks**: Progress indicators and indexing checks
+- **Java 支持**: 从 `PsiMethod` 构建调用图
+- **交互式调用图树**: 可展开的树形结构，支持深度和子节点限制
+- **Spring 感知分析**: Controller/Service/端点识别，DI 感知的接口解析，`@Qualifier`/`@Primary` 支持
+- **MyBatis 集成**: 从注解/XML 检测 Mapper 接口，添加 SQL 语句节点
+- **Spring API 浏览器**: 列出端点，支持搜索和导出筛选的调用图到 JSONL
+- **MyBatis 映射浏览器**: 浏览 SQL 映射，跳转到 Mapper 接口或 XML
+- **JSON 导出（含代码）**: 美化/紧凑 JSON，包含每个节点的源码
+- **导航和上下文操作**: 双击导航，复制签名，查看方法详情
+- **可配置分析**: 深度限制，排除模式（包/类/方法/签名），方法过滤器，接口解析，MyBatis XML 扫描
+- **后台任务**: 进度指示器和索引检查
 
-## Architecture
+## 架构
 
-The plugin follows a layered architecture separating PSI analysis, framework integrations, and UI:
+插件采用分层架构，分离 PSI 分析、框架集成和 UI：
 
 ```
-com.github.rccccat.ideacallgraph/
-├── actions/                # Editor actions (Generate Call Graph)
-├── api/                    # Public interfaces and pure data models
+com.github.rccccat.callgraphjava/
+├── actions/                # 编辑器操作（生成调用图）
+├── api/                    # 公共接口和纯数据模型
 │   ├── CallGraphService
-│   └── model/              # CallGraphData/CallGraphNodeData/CallType (no PSI dependencies)
-├── core/                   # Core analysis engine
-│   ├── CallGraphBuilder    # Orchestrates graph building
-│   ├── visitor/            # Visitor pattern for code traversal
+│   └── model/              # CallGraphData/CallGraphNodeData/CallType（无 PSI 依赖）
+├── core/                   # 核心分析引擎
+│   ├── CallGraphBuilder    # 协调图构建
+│   ├── visitor/            # 访问者模式用于代码遍历
 │   │   ├── CallVisitor
 │   │   └── JavaCallVisitor
-│   ├── traversal/          # Graph traversal strategies
+│   ├── traversal/          # 图遍历策略
 │   │   ├── GraphTraverser
 │   │   └── DepthFirstTraverser
-│   ├── resolver/           # Type and interface resolution
+│   ├── resolver/           # 类型和接口解析
 │   │   ├── TypeResolver
 │   │   └── InterfaceResolver
-├── framework/              # Framework-specific analyzers
+├── framework/              # 框架特定分析器
 │   ├── spring/             # SpringAnalyzer + JavaSpringAnalyzer + SpringInjectionAnalyzer
 │   └── mybatis/            # MyBatisAnalyzer
-├── export/                 # Export and scanning utilities
+├── export/                 # 导出和扫描工具
 │   ├── JsonExporter
 │   ├── CodeExtractor
 │   ├── SpringApiScanner
 │   └── MyBatisMapperScanner
-├── ide/                    # IDE integration layer
-│   ├── model/              # IdeCallGraphNode, IdeCallGraph (with PSI pointers)
+├── ide/                    # IDE 集成层
+│   ├── model/              # IdeCallGraphNode, IdeCallGraph（含 PSI 指针）
 │   └── psi/                # PsiNodeFactory
-├── service/                # Service layer
+├── service/                # 服务层
 │   └── CallGraphServiceImpl
-├── settings/               # Configuration and UI
+├── settings/               # 配置和 UI
 │   ├── CallGraphConfigurable
 │   ├── CallGraphProjectSettings
 │   └── CallGraphAppSettings
-├── toolWindow/             # Tool window UI
+├── toolWindow/             # 工具窗口 UI
 │   ├── MyToolWindowFactory
 │   ├── CallGraphToolWindowContent
 │   ├── SpringApisToolWindowContent
 │   └── MyBatisMappingsToolWindowContent
-├── ui/                     # UI components
+├── ui/                     # UI 组件
 │   ├── CallGraphTreeRenderer
 │   ├── CallGraphNodeNavigator
 │   ├── CallGraphNodeText
 │   ├── JsonPreviewDialog
 │   └── toolwindow/
 │       └── TreeConfiguration
-└── util/                   # Annotation helpers and PSI utilities
+└── util/                   # 注解辅助工具和 PSI 工具
     ├── AnnotationUtils
     ├── AnnotationSearch
     ├── FrameworkAnnotations
     └── ProjectCodeUtils
 ```
 
-### Key Design Patterns
+### 关键设计模式
 
-- **Visitor Pattern**: `CallVisitor` interface with Java implementation for extensible traversal
-- **Strategy Pattern**: `GraphTraverser` for traversal algorithms
-- **Facade Pattern**: `SpringAnalyzer` provides unified access to Spring analysis
-- **Service Layer**: Clean separation between IDE-specific and pure data models
+- **访问者模式**: `CallVisitor` 接口配合 Java 实现，用于可扩展的遍历
+- **策略模式**: `GraphTraverser` 用于遍历算法
+- **外观模式**: `SpringAnalyzer` 提供统一的 Spring 分析访问
+- **服务层**: IDE 特定与纯数据模型的清晰分离
 
 <!-- Plugin description -->
 Call Graph for Java is a call graph analysis tool for IntelliJ IDEA that generates interactive visualizations of method call hierarchies in Java projects. It understands Spring endpoints and dependency injection, links MyBatis mapper methods to SQL statements, and supports JSON export with embedded code. The tool window includes dedicated tabs for call graphs, Spring APIs, and MyBatis mappings, plus search and JSONL export for Spring endpoints.
 <!-- Plugin description end -->
 
-## Usage
+## 使用方法
 
-### Basic Call Graph Generation
+### 基本调用图生成
 
-1. **Generate Call Graph**:
-   - Right-click on any method in your Java code
-   - Select "Generate Call Graph" from the context menu
-   - Or use the keyboard shortcut `Ctrl+Alt+G` (Windows/Linux) / `Cmd+Alt+G` (Mac)
+1. **生成调用图**:
+   - 在 Java 代码中右键点击任意方法
+   - 从上下文菜单选择「生成调用图」
+   - 或使用快捷键 `Ctrl+Alt+G`（Windows/Linux）/ `Cmd+Alt+G`（Mac）
 
-2. **View Results**:
-   - The call graph will appear in the "Call Graph" tool window
-   - Navigate through the tree structure to explore method dependencies
-   - Double-click on any node to jump to the corresponding code
-   - Right-click nodes to copy signatures or view method details
+2. **查看结果**:
+   - 调用图将显示在「Call Graph」工具窗口中
+   - 通过树形结构浏览方法依赖关系
+   - 双击任意节点跳转到对应代码
+   - 右键点击节点可复制签名或查看方法详情
 
-3. **Export Data**:
-   - Use "View JSON" in the tool window to preview the call graph as JSON
-   - Exported JSON includes the node's self code for offline analysis
+3. **导出数据**:
+   - 在工具窗口中使用「查看 JSON」预览调用图
+   - 导出的 JSON 包含每个节点的源码，便于离线分析
 
-### Spring API Browser
+### Spring API 浏览器
 
-1. **Browse APIs**:
-   - Open the "Spring APIs" tab in the tool window
-   - Click "Refresh" to scan all Spring endpoints in your project
-   - Use the search field to filter by class, method, or signature text
+1. **浏览 API**:
+   - 打开工具窗口中的「Spring APIs」标签页
+   - 点击「刷新」扫描项目中的所有 Spring 端点
+   - 使用搜索框按类名、方法名或签名过滤
 
-2. **Export APIs**:
-   - Click "Export" to export filtered endpoints as JSONL
-   - Each line contains one endpoint's call graph
+2. **导出 API**:
+   - 点击「导出」将筛选的端点导出为 JSONL
+   - 每行包含一个端点的调用图
 
-### MyBatis Mappings Browser
+### MyBatis 映射浏览器
 
-1. **Browse Mappings**:
-   - Open the "MyBatis Mappings" tab in the tool window
-   - Click "Refresh" to scan all mapper methods
-   - Double-click to navigate to mapper interface or XML SQL
+1. **浏览映射**:
+   - 打开工具窗口中的「MyBatis Mappings」标签页
+   - 点击「刷新」扫描所有 Mapper 方法
+   - 双击跳转到 Mapper 接口或 XML SQL
 
-### Configuration
+### 配置
 
-1. **Customize Analysis**:
-   - Go to `Settings/Preferences > Tools > Call Graph`
-   - Configure project/third-party depth limits
-   - Set exclude patterns (regex) for package/class/method/signature and method filters
-   - Control interface implementation resolution and traversal breadth
-   - Enable full XML scanning for MyBatis (slower but more complete)
+1. **自定义分析**:
+   - 前往 `Settings/Preferences > Tools > Call Graph`
+   - 配置项目/第三方库深度限制
+   - 设置排除模式（正则）用于包/类/方法/签名过滤
+   - 控制接口实现解析和遍历广度
+   - 启用完整 XML 扫描用于 MyBatis（较慢但更完整）
 
-## Installation
+## 安装
 
-- Using the IDE built-in plugin system:
+- 使用 IDE 内置插件系统：
 
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "Call Graph for Java"</kbd> >
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>搜索 "Call Graph for Java"</kbd> >
   <kbd>Install</kbd>
 
-- Manually:
+- 手动安装：
 
-  Download the [latest release](https://github.com/rccccat/idea-call-graph/releases/latest) and install it manually using
+  下载 [最新版本](https://github.com/rccccat/call-graph-for-java/releases/latest) 并手动安装：
   <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
-## Requirements
+## 系统要求
 
-- IntelliJ IDEA 2023.1 or later (build 241+)
-- Java projects
-- Project indexing must be complete for accurate analysis
+- IntelliJ IDEA 2023.1 或更高版本（build 241+）
+- Java 项目
+- 需要完成项目索引才能进行准确分析
 
-## Supported Frameworks
+## 支持的框架
 
-- **Spring Framework**: Detects controllers, services, REST endpoints, and DI patterns
-- **MyBatis**: Tracks mapper interfaces, annotation SQL, and XML SQL mappings
-- **Standard Java**: All method calls and function invocations
+- **Spring Framework**: 检测 Controller、Service、REST 端点和 DI 模式
+- **MyBatis**: 追踪 Mapper 接口、注解 SQL 和 XML SQL 映射
+- **标准 Java**: 所有方法调用和函数调用
 
-## Development
+## 开发
 
-### Build Commands
+### 构建命令
 
 ```bash
-# Build the plugin
+# 构建插件
 ./gradlew build
 
-# Run the plugin in a development IDE instance
+# 在开发 IDE 实例中运行插件
 ./gradlew runIde
 
-# Run tests
+# 运行测试
 ./gradlew test
 
-# Run a specific test class
-./gradlew test --tests "com.github.rccccat.ideacallgraph.service.CallGraphServiceJavaTest"
+# 运行指定测试类
+./gradlew test --tests "com.github.rccccat.callgraphjava.service.CallGraphServiceJavaTest"
 
-# Build plugin distribution (creates zip in build/distributions)
+# 构建插件发布包（在 build/distributions 生成 zip）
 ./gradlew buildPlugin
 
-# Format code (required before commits)
+# 格式化代码（提交前必须执行）
 ./gradlew ktfmtFormat
 
-# Verify plugin compatibility
+# 验证插件兼容性
 ./gradlew verifyPlugin
 
-# Verify using a local IDE distribution (optional)
+# 使用本地 IDE 发布版验证（可选）
 ./gradlew verifyPlugin -PlocalIdePath="/Applications/IntelliJ IDEA CE.app"
 ```
 
-### Tech Stack
+### 技术栈
 
 - Kotlin 2.2.x
 - IntelliJ Platform SDK 2023.1+
@@ -191,15 +191,15 @@ Call Graph for Java is a call graph analysis tool for IntelliJ IDEA that generat
 - Gradle with Kotlin DSL
 - Gson for JSON serialization
 
-## Contributing
+## 贡献
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run `./gradlew ktfmtFormat` to format code
-5. Run `./gradlew test` to ensure tests pass
-6. Submit a pull request
+1. Fork 仓库
+2. 创建功能分支
+3. 进行修改
+4. 运行 `./gradlew ktfmtFormat` 格式化代码
+5. 运行 `./gradlew test` 确保测试通过
+6. 提交 Pull Request
 
-## License
+## 许可证
 
-This project is licensed under the MIT License - see the repository for details.
+本项目采用 MIT 许可证 - 详见仓库。

@@ -14,7 +14,7 @@ class CallGraphJsonExporterTest : BasePlatformTestCase() {
     myFixture.addSpringWebStubs()
   }
 
-  fun testExportIncludesEndpointMetadataAndCallTargets() {
+  fun testExportIncludesCallTargets() {
     val file =
         myFixture.addFileToProject(
             "src/demo/DemoController.java",
@@ -55,7 +55,6 @@ class CallGraphJsonExporterTest : BasePlatformTestCase() {
 
     assertEquals(graph.data.rootNodeId, export.rootId)
     assertEquals("DemoController.ping", rootNode.entryMethod)
-    assertTrue(rootNode.isApiCenterMethod)
     assertTrue(rootNode.callTargets.contains(callTargetId))
     assertTrue(rootNode.selfCode.contains("ping()"))
   }

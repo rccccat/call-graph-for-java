@@ -18,7 +18,6 @@ data class CallGraphJsonNode(
     val entryMethod: String,
     val signature: String,
     val selfCode: String,
-    val isApiCenterMethod: Boolean,
     val callTargets: List<String>,
 ) : Serializable {
   companion object {
@@ -72,7 +71,6 @@ class JsonExporter {
               entryMethod = "${node.className ?: "Unknown"}.${node.name}",
               signature = node.signature,
               selfCode = codeMap[nodeId] ?: "// Code not available",
-              isApiCenterMethod = node.isSpringEndpoint,
               callTargets = callTargetIds,
           )
 

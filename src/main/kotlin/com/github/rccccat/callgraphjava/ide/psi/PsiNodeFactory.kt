@@ -5,6 +5,7 @@ import com.github.rccccat.callgraphjava.api.model.NodeType
 import com.github.rccccat.callgraphjava.framework.mybatis.MyBatisAnalyzer
 import com.github.rccccat.callgraphjava.framework.spring.SpringAnalyzer
 import com.github.rccccat.callgraphjava.ide.model.IdeCallGraphNode
+import com.github.rccccat.callgraphjava.util.buildCallGraphNodeId
 import com.github.rccccat.callgraphjava.util.isProjectCode
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
@@ -12,7 +13,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.SmartPointerManager
 
-/** Factory for creating IDE nodes and pure node data from PSI elements. */
+/** 基于 PSI 元素创建 IDE 节点与纯数据节点的工厂。 */
 class PsiNodeFactory(
     private val project: Project,
     private val springAnalyzer: SpringAnalyzer,
@@ -33,10 +34,8 @@ class PsiNodeFactory(
   private fun createFromJavaMethod(method: PsiMethod): CallGraphNodeData {
     val containingClass = method.containingClass
     val className = containingClass?.name
-    val qualifiedClassName = containingClass?.qualifiedName
 
     val signature = buildJavaSignature(method)
-    val id = buildJavaNodeId(method, qualifiedClassName)
 
     val springInfo = springAnalyzer.analyzeMethod(method)
     val myBatisInfo = myBatisAnalyzer.analyzeMapperMethod(method)
@@ -49,9 +48,9 @@ class PsiNodeFactory(
           else -> NodeType.JAVA_METHOD
         }
 
-    val file = method.containingFile?.virtualFile
     val offset = method.textRange?.startOffset ?: -1
-    val lineNumber = file?.let { calculateLineNumber(method, offset) } ?: -1
+    val lineNumber = calculateLineNumber(method, offset)
+    val id = buildCallGraphNodeId(method, lineNumber, offset)
 
     return CallGraphNodeData(
         id = id,
@@ -75,26 +74,6 @@ class PsiNodeFactory(
           "${param.type.presentableText} ${param.name}"
         }
     return "$returnType ${method.name}($parameters)"
-  }
-
-  private fun buildJavaNodeId(
-      method: PsiMethod,
-      qualifiedClassName: String?,
-  ): String {
-    val paramTypes = method.parameterList.parameters.joinToString(",") { it.type.canonicalText }
-    val container = qualifiedClassName ?: buildFileContainer(method)
-    val anchor = buildFileAnchor(method)
-    return "$container#${method.name}($paramTypes)@$anchor"
-  }
-
-  private fun buildFileContainer(element: PsiElement): String {
-    val file = element.containingFile?.virtualFile
-    return file?.path ?: element.containingFile?.name ?: "UnknownFile"
-  }
-
-  private fun buildFileAnchor(element: PsiElement): String {
-    val offset = element.textRange?.startOffset ?: -1
-    return "${buildFileContainer(element)}:$offset"
   }
 
   private fun calculateLineNumber(

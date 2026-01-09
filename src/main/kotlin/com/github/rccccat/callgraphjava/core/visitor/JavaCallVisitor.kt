@@ -47,16 +47,15 @@ class JavaCallVisitor {
                 } else {
                   null
                 } ?: expression.resolveMethod()
-            val targetMethod = resolvedMethod
 
-            if (targetMethod != null) {
+            if (resolvedMethod != null) {
               val implementations =
                   if (isSuperCall) {
                     null
                   } else {
-                    resolveOverrideImplementationsIfNeeded(targetMethod, injectionPoint, context)
+                    resolveOverrideImplementationsIfNeeded(resolvedMethod, injectionPoint, context)
                   }
-              callTargets.add(CallTargetInfo(targetMethod, implementations, expression))
+              callTargets.add(CallTargetInfo(resolvedMethod, implementations, expression))
             }
           }
 

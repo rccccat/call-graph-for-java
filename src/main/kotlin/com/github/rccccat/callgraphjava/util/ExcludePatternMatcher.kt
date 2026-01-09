@@ -2,7 +2,6 @@ package com.github.rccccat.callgraphjava.util
 
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiClassType
-import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiType
 
@@ -44,13 +43,12 @@ private constructor(
       if (trimmed.isEmpty()) {
         return ParseResult(null, "Pattern is empty")
       }
-      val parsed = parseScope(trimmed)
-      if (parsed == null) {
-        return ParseResult(
-            null,
-            "Pattern must start with one of: pkg:, class:, method:, sig:",
-        )
-      }
+      val parsed =
+          parseScope(trimmed)
+              ?: return ParseResult(
+                  null,
+                  "Pattern must start with one of: pkg:, class:, method:, sig:",
+              )
       val (scope, regexText) = parsed
       if (regexText.isBlank()) {
         return ParseResult(null, "Pattern is empty")
@@ -75,9 +73,6 @@ private constructor(
           else -> null
         }
   }
-
-  fun matchesElement(element: PsiElement): Boolean =
-      (element as? PsiMethod)?.let { matchesMethod(it) } ?: false
 
   fun matchesMethod(method: PsiMethod): Boolean {
     if (entries.isEmpty()) return false
@@ -142,7 +137,10 @@ private constructor(
 
       private fun qualifiedTypeText(type: PsiType): String =
           when (type) {
-            is PsiArrayType -> "${qualifiedTypeText(type.componentType)}[]"
+            is PsiArrayType -> {
+              "${qualifiedTypeText(type.componentType)}[]"
+            }
+
             is PsiClassType -> {
               val resolved = type.resolve()
               val rawName = resolved?.qualifiedName ?: type.canonicalText
@@ -155,26 +153,35 @@ private constructor(
               }
             }
 
-            else -> type.canonicalText
+            else -> {
+              type.canonicalText
+            }
           }
     }
   }
 
   private fun PatternEntry.matches(targets: MethodTargets): Boolean =
       when (scope) {
-        Scope.PACKAGE ->
-            targets.packageName?.let { target -> target == rawText || regex.matches(target) }
-                ?: false
-        Scope.CLASS ->
-            targets.classTargets.any { target -> target == rawText || regex.matches(target) }
-        Scope.METHOD -> targets.methodName == rawText || regex.matches(targets.methodName)
-        Scope.SIGNATURE ->
-            targets.signatureTargets.any { target ->
-              target == rawText ||
-                  target == normalizedRawText ||
-                  normalizeJavaLang(target) == rawText ||
-                  normalizeJavaLang(target) == normalizedRawText ||
-                  regex.matches(target)
-            }
+        Scope.PACKAGE -> {
+          targets.packageName?.let { target -> target == rawText || regex.matches(target) } ?: false
+        }
+
+        Scope.CLASS -> {
+          targets.classTargets.any { target -> target == rawText || regex.matches(target) }
+        }
+
+        Scope.METHOD -> {
+          targets.methodName == rawText || regex.matches(targets.methodName)
+        }
+
+        Scope.SIGNATURE -> {
+          targets.signatureTargets.any { target ->
+            target == rawText ||
+                target == normalizedRawText ||
+                normalizeJavaLang(target) == rawText ||
+                normalizeJavaLang(target) == normalizedRawText ||
+                regex.matches(target)
+          }
+        }
       }
 }

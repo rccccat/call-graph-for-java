@@ -58,13 +58,6 @@ object SpringAnnotations {
 }
 
 object MyBatisAnnotations {
-  val mapperAnnotations =
-      setOf(
-          "Mapper",
-          "Repository",
-          "MapperScan",
-      )
-
   val mapperAnnotationQualifiedNames =
       listOf(
           "org.apache.ibatis.annotations.Mapper",

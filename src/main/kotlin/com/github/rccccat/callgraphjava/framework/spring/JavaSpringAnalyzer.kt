@@ -1,7 +1,6 @@
 package com.github.rccccat.callgraphjava.framework.spring
 
 import com.github.rccccat.callgraphjava.util.SpringAnnotations
-import com.github.rccccat.callgraphjava.util.hasAnyAnnotation
 import com.github.rccccat.callgraphjava.util.hasAnyAnnotationOrMeta
 import com.intellij.openapi.application.ReadAction
 import com.intellij.psi.PsiElement
@@ -26,10 +25,5 @@ class JavaSpringAnalyzer {
           isEndpoint = isEndpoint,
       )
     }
-  }
-
-  fun isSpringComponent(element: PsiMethod): Boolean {
-    val containingClass = element.containingClass ?: return false
-    return hasAnyAnnotation(containingClass, SpringAnnotations.componentAnnotations)
   }
 }

@@ -54,7 +54,6 @@ class CallGraphBuilder(
         VisitorContext(
             project = project,
             settings = settings,
-            typeResolver = typeResolver,
             interfaceResolver = interfaceResolver,
             springAnalyzer = springAnalyzer,
             excludePatternMatcher = excludePatternMatcher,

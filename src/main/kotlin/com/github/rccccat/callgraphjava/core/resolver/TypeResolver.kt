@@ -27,51 +27,6 @@ class TypeResolver(
         else -> null
       }
 
-  /** Resolves the element type from a collection type. */
-  fun resolveCollectionElementClass(
-      type: PsiType,
-      contextElement: PsiElement?,
-  ): PsiClass? {
-    val classType = type as? PsiClassType ?: return null
-    val resolved = classType.resolve()
-    val qualifiedName = resolved?.qualifiedName
-    val parameters = classType.parameters
-
-    if (qualifiedName == null) {
-      val rawName = classType.canonicalText.substringBefore("<")
-      if (rawName !in COLLECTION_TYPES) {
-        return null
-      }
-      val fallbackName = extractTypeArgumentFromText(classType.canonicalText, rawName)
-      return fallbackName?.let { findClassByName(it, contextElement) }
-    }
-
-    val fallbackTypeName =
-        if (parameters.isEmpty()) {
-          extractTypeArgumentFromText(classType.canonicalText, qualifiedName)
-        } else {
-          null
-        }
-    val fallbackType = fallbackTypeName?.let { findClassByName(it, contextElement) }
-
-    return when (qualifiedName) {
-      "java.util.List",
-      "java.util.Set",
-      "java.util.Collection",
-      -> {
-        resolveClassFromType(parameters.firstOrNull(), contextElement) ?: fallbackType
-      }
-
-      "java.util.Map" -> {
-        resolveClassFromType(parameters.getOrNull(1), contextElement) ?: fallbackType
-      }
-
-      else -> {
-        null
-      }
-    }
-  }
-
   /** Finds a class by name, with import and package context awareness. */
   fun findClassByName(
       qualifiedName: String,
@@ -124,23 +79,6 @@ class TypeResolver(
     return null
   }
 
-  private fun extractTypeArgumentFromText(
-      typeText: String,
-      rawTypeName: String,
-  ): String? {
-    val typeArgs = typeText.substringAfter("<", "").substringBeforeLast(">", "")
-    if (typeArgs.isBlank()) return null
-
-    val parts = splitTypeArguments(typeArgs)
-    return when (rawTypeName) {
-      "java.util.Map",
-      "Map",
-      -> parts.getOrNull(1)
-
-      else -> parts.firstOrNull()
-    }
-  }
-
   /** -> ["String", "List<Integer>"] */
   private fun splitTypeArguments(typeArgs: String): List<String> {
     val result = mutableListOf<String>()
@@ -168,7 +106,9 @@ class TypeResolver(
           }
         }
 
-        else -> current.append(char)
+        else -> {
+          current.append(char)
+        }
       }
     }
 
@@ -177,19 +117,5 @@ class TypeResolver(
     }
 
     return result
-  }
-
-  companion object {
-    private val COLLECTION_TYPES =
-        setOf(
-            "java.util.List",
-            "java.util.Set",
-            "java.util.Collection",
-            "java.util.Map",
-            "List",
-            "Set",
-            "Collection",
-            "Map",
-        )
   }
 }

@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 class InterfaceResolver(
     private val project: Project,
     private val springAnalyzer: SpringAnalyzer,
-    private val cacheManager: CallGraphCacheManager,
+    cacheManager: CallGraphCacheManager,
 ) {
   private sealed interface MethodLookupResult {
     data class Found(

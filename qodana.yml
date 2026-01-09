@@ -7,3 +7,5 @@ exclude:
   - name: All
     paths:
       - .qodana
+  - name: DialogTitleCapitalization
+  - name: TextI18n

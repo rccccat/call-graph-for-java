@@ -12,7 +12,7 @@ internal data class MethodMappingIndex(
 
 @Service(Service.Level.PROJECT)
 class SpringMethodCache(
-    private val project: Project,
+    project: Project,
 ) {
   private val cacheManager = CallGraphCacheManager.getInstance(project)
   private val mappingIndexCache =

@@ -7,15 +7,13 @@
     <depends>com.intellij.java</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.rccccat.callgraphjava.toolWindow.MyToolWindowFactory" id="Call Graph"/>
+        <toolWindow factoryClass="com.github.rccccat.callgraphjava.toolWindow.MyToolWindowFactory" 
+                    id="Call Graph"
+                    anchor="right"
+                    canCloseContents="true"/>
         <projectConfigurable groupId="tools" displayName="Call Graph" id="callgraph.settings"
                              instance="com.github.rccccat.callgraphjava.settings.CallGraphConfigurable"/>
         <notificationGroup id="Call Graph" displayType="BALLOON" isLogByDefault="false"/>
-
-        <applicationService serviceImplementation="com.github.rccccat.callgraphjava.settings.CallGraphAppSettings"/>
-
-        <projectService serviceImplementation="com.github.rccccat.callgraphjava.service.CallGraphServiceImpl"/>
-        <projectService serviceImplementation="com.github.rccccat.callgraphjava.settings.CallGraphProjectSettings"/>
     </extensions>
 
     <actions>

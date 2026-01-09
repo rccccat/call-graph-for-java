@@ -1,7 +1,6 @@
 package com.github.rccccat.callgraphjava.core.visitor
 
 import com.github.rccccat.callgraphjava.core.resolver.InterfaceResolver
-import com.github.rccccat.callgraphjava.core.resolver.TypeResolver
 import com.github.rccccat.callgraphjava.framework.spring.SpringAnalyzer
 import com.github.rccccat.callgraphjava.settings.CallGraphProjectSettings
 import com.github.rccccat.callgraphjava.util.ExcludePatternMatcher
@@ -26,7 +25,6 @@ data class ImplementationInfo(
 class VisitorContext(
     val project: Project,
     val settings: CallGraphProjectSettings,
-    val typeResolver: TypeResolver,
     val interfaceResolver: InterfaceResolver,
     val springAnalyzer: SpringAnalyzer,
     val excludePatternMatcher: ExcludePatternMatcher,

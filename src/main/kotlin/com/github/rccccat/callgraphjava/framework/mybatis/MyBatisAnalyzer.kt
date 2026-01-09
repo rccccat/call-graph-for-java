@@ -7,6 +7,7 @@ import com.github.rccccat.callgraphjava.cache.CallGraphCacheManager
 import com.github.rccccat.callgraphjava.ide.model.IdeCallGraphNode
 import com.github.rccccat.callgraphjava.util.buildMethodKeyWithParams
 import com.github.rccccat.callgraphjava.util.extractStringValues
+import com.intellij.ide.highlighter.XmlFileType
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -17,7 +18,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.SmartPointerManager
-import com.intellij.psi.search.FilenameIndex
+import com.intellij.psi.search.FileTypeIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.xml.XmlFile
 import java.util.concurrent.ConcurrentHashMap
@@ -25,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
 /** Analyzer for MyBatis mapper methods and SQL mappings. */
 class MyBatisAnalyzer(
     private val project: Project,
-    private val cacheManager: CallGraphCacheManager,
+    cacheManager: CallGraphCacheManager,
 ) {
   private val log = Logger.getInstance(MyBatisAnalyzer::class.java)
   private val mapperMethodCache =
@@ -159,7 +160,7 @@ class MyBatisAnalyzer(
       val scope = GlobalSearchScope.projectScope(project)
       val xmlFiles =
           ReadAction.compute<Collection<VirtualFile>, Exception> {
-            FilenameIndex.getAllFilesByExt(project, "xml", scope)
+            FileTypeIndex.getFiles(XmlFileType.INSTANCE, scope)
           }
 
       for (file in xmlFiles) {
@@ -246,9 +247,7 @@ class MyBatisAnalyzer(
 
     val primitiveFromWrapper =
         primitiveWrapperMap.entries.firstOrNull { it.value == entryType }?.key
-    if (primitiveFromWrapper != null && primitiveFromWrapper == methodType) return true
-
-    return false
+    return primitiveFromWrapper != null && primitiveFromWrapper == methodType
   }
 
   private fun normalizeTypeName(typeName: String): String {

@@ -21,7 +21,7 @@ import com.intellij.psi.search.searches.AllClassesSearch
 /** classes and extracts methods with @RequestMapping annotations. */
 class SpringApiScanner(
     private val project: Project,
-    private val cacheManager: CallGraphCacheManager,
+    cacheManager: CallGraphCacheManager,
 ) {
   private val scanIndicator = ThreadLocal<ProgressIndicator?>()
   private val controllerAnnotationClassesCache =
@@ -80,21 +80,14 @@ class SpringApiScanner(
       process: (PsiClass) -> Unit,
   ) {
     val query = AllClassesSearch.search(scope, project)
-    val iterator = ReadAction.compute<Iterator<PsiClass>, Exception> { query.iterator() }
     indicator.isIndeterminate = true
 
-    while (true) {
-      val processedInBatch =
-          ReadAction.compute<Int, Exception> {
-            var count = 0
-            while (iterator.hasNext() && count < fullScanBatchSize) {
-              process(iterator.next())
-              count++
-            }
-            count
-          }
-      if (processedInBatch == 0) break
+    val allClasses = mutableListOf<PsiClass>()
+    ReadAction.run<Exception> { query.forEach { allClasses.add(it) } }
+
+    allClasses.chunked(fullScanBatchSize).forEach { batch ->
       indicator.checkCanceled()
+      ReadAction.run<Exception> { batch.forEach(process) }
     }
 
     indicator.isIndeterminate = false

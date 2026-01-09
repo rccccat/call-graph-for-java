@@ -2,7 +2,6 @@ package com.github.rccccat.callgraphjava.util
 
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiSubstitutor
 
 /** 规避匿名/局部类冲突的键生成工具。 */
 
@@ -23,13 +22,6 @@ fun buildClassKey(psiClass: PsiClass): String {
   }
   val className = psiClass.name ?: "AnonymousClass"
   return if (filePath != null) "$filePath:$className" else className
-}
-
-/** 遵循 buildClassKey 规则。 */
-fun buildMethodKey(method: PsiMethod): String {
-  val classKey = method.containingClass?.let { buildClassKey(it) } ?: "UnknownClass"
-  val signature = method.getSignature(PsiSubstitutor.EMPTY).toString()
-  return "$classKey#$signature"
 }
 
 /** 生成带参数类型的稳定键。 */

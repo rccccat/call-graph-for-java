@@ -140,8 +140,6 @@ class MyBatisAnalyzer(
               isProjectCode = true,
               sqlType = sqlType,
               sqlStatement = mybatisInfo.sqlStatement,
-              offset = offset,
-              lineNumber = lineNumber,
           )
 
       IdeCallGraphNode(nodeData, pointer)

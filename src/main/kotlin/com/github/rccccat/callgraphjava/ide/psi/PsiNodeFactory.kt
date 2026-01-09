@@ -62,8 +62,6 @@ class PsiNodeFactory(
         isSpringEndpoint = springInfo.isEndpoint,
         sqlType = myBatisInfo.sqlType,
         sqlStatement = myBatisInfo.sqlStatement,
-        offset = offset,
-        lineNumber = lineNumber,
     )
   }
 

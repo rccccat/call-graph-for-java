@@ -15,8 +15,6 @@ data class CallGraphJsonExport(
 }
 
 data class CallGraphJsonNode(
-    val entryMethod: String,
-    val signature: String,
     val selfCode: String,
     val callTargets: List<String>,
 ) : Serializable {
@@ -68,9 +66,7 @@ class JsonExporter {
 
       nodes[nodeId] =
           CallGraphJsonNode(
-              entryMethod = "${node.className ?: "Unknown"}.${node.name}",
-              signature = node.signature,
-              selfCode = codeMap[nodeId] ?: "// Code not available",
+              selfCode = codeMap[nodeId] ?: "// 无法获取代码",
               callTargets = callTargetIds,
           )
 

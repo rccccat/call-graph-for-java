@@ -29,8 +29,6 @@ data class CallGraphNodeData(
     val isSpringEndpoint: Boolean = false,
     val sqlType: SqlType? = null,
     val sqlStatement: String? = null,
-    val offset: Int = -1,
-    val lineNumber: Int = -1,
 ) : Serializable {
   companion object {
     private const val serialVersionUID: Long = 1L

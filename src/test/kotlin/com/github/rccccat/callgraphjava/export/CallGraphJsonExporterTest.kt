@@ -54,7 +54,6 @@ class CallGraphJsonExporterTest : BasePlatformTestCase() {
             ?: error("Call target missing")
 
     assertEquals(graph.data.rootNodeId, export.rootId)
-    assertEquals("DemoController.ping", rootNode.entryMethod)
     assertTrue(rootNode.callTargets.contains(callTargetId))
     assertTrue(rootNode.selfCode.contains("ping()"))
   }

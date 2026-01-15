@@ -4,7 +4,9 @@ import com.github.rccccat.callgraphjava.addSpringCoreStubs
 import com.github.rccccat.callgraphjava.addSpringWebStubs
 import com.github.rccccat.callgraphjava.cache.CallGraphCacheManager
 import com.github.rccccat.callgraphjava.settings.CallGraphProjectSettings
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 class SpringApiScannerTest : BasePlatformTestCase() {
@@ -197,5 +199,64 @@ class SpringApiScannerTest : BasePlatformTestCase() {
     val endpointNames = endpoints.map { it.name }.toSet()
 
     assertTrue(endpointNames.contains("ping"))
+  }
+
+  fun testCacheInvalidationOnSettingsChange() {
+    val cacheManager = CallGraphCacheManager.getInstance(project)
+    val settings = CallGraphProjectSettings.getInstance(project)
+    var computeCount = 0
+    val cachedValue =
+        cacheManager.createCachedValue {
+          computeCount++
+          settings.springEnableFullScan
+        }
+
+    val firstValue = cachedValue.value
+    assertEquals(1, computeCount)
+
+    settings.setSpringEnableFullScan(!firstValue)
+
+    val secondValue = cachedValue.value
+    assertEquals(2, computeCount)
+    assertNotSame(firstValue, secondValue)
+  }
+
+  fun testCacheInvalidationOnPsiChange() {
+    val cacheManager = CallGraphCacheManager.getInstance(project)
+    var computeCount = 0
+    val cachedValue =
+        cacheManager.createCachedValue {
+          computeCount++
+          "ok"
+        }
+
+    cachedValue.value
+    assertEquals(1, computeCount)
+
+    val psiFile =
+        myFixture.addFileToProject(
+            "src/demo/Demo.java",
+            """
+            package demo;
+            class Demo { }
+            """
+                .trimIndent(),
+        )
+    val document =
+        PsiDocumentManager.getInstance(project).getDocument(psiFile) ?: error("未找到可写入的文档")
+
+    WriteCommandAction.runWriteCommandAction(project) {
+      document.setText(
+          """
+          package demo;
+          class Demo { void ping() { } }
+          """
+              .trimIndent(),
+      )
+    }
+    PsiDocumentManager.getInstance(project).commitAllDocuments()
+
+    cachedValue.value
+    assertEquals(2, computeCount)
   }
 }

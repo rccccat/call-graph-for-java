@@ -140,7 +140,6 @@ class SpringApisToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "正在扫描 Spring API", true) {
               override fun run(indicator: ProgressIndicator) {
-                service.resetCaches()
                 val scanner = SpringApiScanner(project, cacheManager)
                 val nodes =
                     try {

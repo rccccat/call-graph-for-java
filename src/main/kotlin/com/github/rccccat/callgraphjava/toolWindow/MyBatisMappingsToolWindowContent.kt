@@ -111,7 +111,6 @@ class MyBatisMappingsToolWindowContent(
         .run(
             object : Task.Backgroundable(project, "正在扫描 MyBatis 映射器", true) {
               override fun run(indicator: ProgressIndicator) {
-                service.resetCaches()
                 val settings = CallGraphProjectSettings.getInstance(project)
                 val scanner = MyBatisMapperScanner(project, settings.mybatisScanAllXml)
                 val nodes =

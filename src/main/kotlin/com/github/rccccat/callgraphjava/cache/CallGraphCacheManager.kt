@@ -1,5 +1,7 @@
 package com.github.rccccat.callgraphjava.cache
 
+import com.github.rccccat.callgraphjava.settings.CallGraphAppSettings
+import com.github.rccccat.callgraphjava.settings.CallGraphProjectSettings
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootModificationTracker
@@ -16,15 +18,17 @@ class CallGraphCacheManager(
   private val cachedValuesManager = CachedValuesManager.getManager(project)
   private val manualTracker = SimpleModificationTracker()
 
-  fun <T> createCachedValue(
-      valueProvider: () -> T,
-  ): CachedValue<T> {
+  fun <T> createCachedValue(valueProvider: () -> T): CachedValue<T> {
+    val projectSettings = CallGraphProjectSettings.getInstance(project)
+    val appSettings = CallGraphAppSettings.getInstance()
     return cachedValuesManager.createCachedValue(
         {
           CachedValueProvider.Result.create(
               valueProvider(),
               PsiModificationTracker.MODIFICATION_COUNT,
               ProjectRootModificationTracker.getInstance(project),
+              projectSettings.modificationTracker,
+              appSettings.modificationTracker,
               manualTracker,
           )
         },
